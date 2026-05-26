@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 from dataclasses import dataclass
 
-MAX_STR_LEN = 12
+MAX_STR_LEN = 16
 THRESHOLD = 1e-12
 
 @dataclass
@@ -507,6 +507,7 @@ def number_operator(q):
     bits = (1 << g0) | (1 << g1)
 
     return {
+        0: 0.5,
         bits: -0.5j
     }
 
@@ -537,6 +538,24 @@ def combine_operators(op_list):
     return dict(out)
 
 
+def majorana_product_sign(bitsA, bitsB):
+
+    sign = 1
+
+    x = bitsA
+    while x:
+        lsb = x & -x
+        i = lsb.bit_length() - 1
+
+        # Count Majoranas in bitsB with index < i.
+        if bitcount(bitsB & ((1 << i) - 1)) % 2:
+            sign *= -1
+
+        x ^= lsb
+
+    return sign
+
+
 def multiply_operators(opA, opB):
 
     out = defaultdict(complex)
@@ -545,9 +564,11 @@ def multiply_operators(opA, opB):
 
         for bitsB, coeffB in opB.items():
 
+            sign = majorana_product_sign(bitsA, bitsB)
+
             new_bits = bitsA ^ bitsB
 
-            out[new_bits] += coeffA * coeffB
+            out[new_bits] += sign * coeffA * coeffB
 
     return dict(out)
 
@@ -859,7 +880,7 @@ def track_observable_growth_layered(
 # =============================================================================
 # Fock-State Expectation Values
 # =============================================================================
-
+'''
 def overlap_with_fock(strings, fock_state):
 
     total = 0.0 + 0.0j
@@ -885,7 +906,36 @@ def overlap_with_fock(strings, fock_state):
         total += val
 
     return np.real(total)
+'''
 
+def overlap_with_fock(strings, fock_state):
+    total = 0.0 + 0.0j
+
+    for bits, coeff in strings.items():
+        val = coeff
+
+        diagonal = True
+
+        for q, occ in enumerate(fock_state):
+            g0, g1 = majorana_pair(q)
+
+            b0 = has_bit(bits, g0)
+            b1 = has_bit(bits, g1)
+
+            if b0 != b1:
+                diagonal = False
+                break
+
+            if b0 and b1:
+                # For convention n = 1/2 - i/2 gamma0 gamma1,
+                # i gamma0 gamma1 has eigenvalue 1 - 2n.
+                # Therefore gamma0 gamma1 has eigenvalue -i(1 - 2n).
+                val *= -1j * (1 - 2 * occ)
+
+        if diagonal:
+            total += val
+
+    return np.real_if_close(total).real
 
 # =============================================================================
 # Expectation Value Under Noise
@@ -907,7 +957,14 @@ def expectation_value(
 
     n_qubits = len(fock_state)
 
+    print(f"\nTraversing {len(layers)} layers:")
+
     for layer_idx in reversed(range(len(layers))):
+
+        if layer_idx % 10 != 0:
+            print("*", end="", flush=True)
+        else:
+            print("|", end="", flush=True)
 
         layer = layers[layer_idx]
 
@@ -1093,6 +1150,27 @@ if __name__ == "__main__":
         + [0] * (norb - norb // 2)
     ) * 2
 
+
+    # -----------------------------------------------------------------
+    # Energy Evaluation
+    # -----------------------------------------------------------------
+
+    E = vqe_energy(
+        circuit,
+        fock_state,
+        norb,
+        t=1.0,
+        U=4.0,
+        gamma=0,
+        mode="deterministic",
+        max_len=MAX_STR_LEN
+    )
+
+    print()
+    print("VQE Energy =", E)
+    print()
+
+'''
     # -----------------------------------------------------------------
     # Observable Growth
     # -----------------------------------------------------------------
@@ -1107,26 +1185,6 @@ if __name__ == "__main__":
         max_len=MAX_STR_LEN
     )
 
-    # -----------------------------------------------------------------
-    # Energy Evaluation
-    # -----------------------------------------------------------------
-
-    E = vqe_energy(
-        circuit,
-        fock_state,
-        norb,
-        t=1.0,
-        U=4.0,
-        gamma=1e-2,
-        mode="deterministic",
-        max_len=MAX_STR_LEN
-    )
-
-    print()
-    print("VQE Energy =", E)
-    print()
-
-'''
     # -----------------------------------------------------------------
     # Monte Carlo Noisy Expectation
     # -----------------------------------------------------------------
