@@ -3,32 +3,8 @@ import numpy as np
 from collections import defaultdict
 from dataclasses import dataclass
 
-# =============================================================================
-# Majorana String Representation
-# =============================================================================
-#
-# Each Majorana string is represented as:
-#
-#     int bitmask
-#
-# Bit k = 1 means Majorana γ_k is present.
-#
-# Example:
-#
-#     γ1 γ4 γ7
-#
-# becomes:
-#
-#     bits = (1<<1) | (1<<4) | (1<<7)
-#
-# This is MUCH faster than boolean arrays.
-#
-# =============================================================================
-
-
-# =============================================================================
-# Gate Definitions
-# =============================================================================
+MAX_STR_LEN = 12
+THRESHOLD = 1e-12
 
 @dataclass
 class Gate:
@@ -37,10 +13,6 @@ class Gate:
     theta: float = 0.0
     beta: float = 0.0
 
-
-# =============================================================================
-# Bit Utilities
-# =============================================================================
 
 def toggle_bit(bits, idx):
     return bits ^ (1 << idx)
@@ -54,40 +26,15 @@ def bitcount(bits):
     return bits.bit_count()
 
 
-# =============================================================================
-# Majorana Operator Mapping
-# =============================================================================
-#
-# qubit q:
-#
-# γ_{2q}
-# γ_{2q+1}
-#
-# =============================================================================
-
 def majorana_pair(q):
     return 2 * q, 2 * q + 1
 
-
-# =============================================================================
-# String Length
-# =============================================================================
 
 def majorana_length(bits):
     return bitcount(bits)
 
 
-# =============================================================================
-# Simplified Pruning
-# =============================================================================
-
-def prune_strings(strings, max_len=12, coeff_thresh=1e-12):
-    """
-    Remove:
-      - long strings
-      - tiny coefficients
-    """
-
+def prune_strings(strings, max_len=MAX_STR_LEN, coeff_thresh=THRESHOLD):
     pruned = {}
 
     for bits, coeff in strings.items():
@@ -367,7 +314,7 @@ def orbital_rotation(gates, givens_rotations, phase_shifts, norb):
 
         phi = np.angle(complex(ph[0], ph[1]))
 
-        if abs(phi) < 1e-14:
+        if abs(phi) < 1e-6:
             continue
 
         gates.append(Gate("phase", (q,), -phi))
@@ -376,7 +323,7 @@ def orbital_rotation(gates, givens_rotations, phase_shifts, norb):
 
 def j_op(gates, diag_mat_aa, diag_mat_ab, time, norb):
 
-    threshold = 1e-14
+    threshold = THRESHOLD
 
     # same spin
     for offset, mat in [(0, diag_mat_aa), (norb, diag_mat_aa)]:
@@ -475,7 +422,7 @@ def build_lucj_circuit(data):
 # Propagation Driver
 # =============================================================================
 
-def propagate_majorana(circuit, initial_strings, max_len=12):
+def propagate_majorana(circuit, initial_strings, max_len=MAX_STR_LEN):
 
     strings = dict(initial_strings)
 
@@ -528,7 +475,7 @@ def propagate_majorana(circuit, initial_strings, max_len=12):
         strings = merge_strings(strings)
 
         # pruning
-        strings = prune_strings(strings, max_len=max_len)
+        strings = prune_strings(strings, max_len=MAX_STR_LEN)
 
         if idx % 10 == 0:
             print(f"Gate {idx}/{len(circuit)} -> {len(strings)} strings")
@@ -536,10 +483,671 @@ def propagate_majorana(circuit, initial_strings, max_len=12):
     return strings
 
 
+
+# =============================================================================
+# NEW VQE CODE
+# =============================================================================
+
+
+# =============================================================================
+# Noise + VQE Framework
+# =============================================================================
+
+# Add this BELOW your existing code.
+
+
+# =============================================================================
+# Observable Builders
+# =============================================================================
+
+def number_operator(q):
+
+    g0, g1 = majorana_pair(q)
+
+    bits = (1 << g0) | (1 << g1)
+
+    return {
+        bits: -0.5j
+    }
+
+
+def hopping_operator(q1, q2):
+
+    a0, a1 = majorana_pair(q1)
+    b0, b1 = majorana_pair(q2)
+
+    term1 = (1 << a0) | (1 << b1)
+    term2 = (1 << a1) | (1 << b0)
+
+    return {
+        term1: 0.5j,
+        term2: -0.5j,
+    }
+
+
+def combine_operators(op_list):
+
+    out = defaultdict(complex)
+
+    for op in op_list:
+
+        for bits, coeff in op.items():
+            out[bits] += coeff
+
+    return dict(out)
+
+
+def multiply_operators(opA, opB):
+
+    out = defaultdict(complex)
+
+    for bitsA, coeffA in opA.items():
+
+        for bitsB, coeffB in opB.items():
+
+            new_bits = bitsA ^ bitsB
+
+            out[new_bits] += coeffA * coeffB
+
+    return dict(out)
+
+
+def scale_operator(op, scalar):
+
+    return {
+        bits: scalar * coeff
+        for bits, coeff in op.items()
+    }
+
+
+# =============================================================================
+# Physical Observables
+# =============================================================================
+
+def build_site_density(norb, site):
+
+    up = number_operator(site)
+    dn = number_operator(site + norb)
+
+    return combine_operators([up, dn])
+
+
+def build_total_density(norb):
+
+    ops = []
+
+    for q in range(2 * norb):
+        ops.append(number_operator(q))
+
+    return combine_operators(ops)
+
+
+def build_double_occupancy(norb):
+
+    ops = []
+
+    for site in range(norb):
+
+        up = number_operator(site)
+        dn = number_operator(site + norb)
+
+        ops.append(multiply_operators(up, dn))
+
+    return combine_operators(ops)
+
+
+def build_average_double_occupancy(norb):
+
+    return scale_operator(
+        build_double_occupancy(norb),
+        1.0 / norb
+    )
+
+
+def build_nn_coherence(norb):
+
+    ops = []
+
+    for i in range(norb - 1):
+
+        # spin up
+        ops.append(
+            hopping_operator(i, i + 1)
+        )
+
+        # spin down
+        ops.append(
+            hopping_operator(
+                i + norb,
+                i + norb + 1
+            )
+        )
+
+    out = combine_operators(ops)
+
+    return scale_operator(
+        out,
+        1.0 / (2 * (norb - 1))
+    )
+
+
+# =============================================================================
+# Noise Models
+# =============================================================================
+
+def damp_observable(
+    strings,
+    gamma,
+    coeff_thresh=THRESHOLD
+):
+
+    out = {}
+
+    for bits, coeff in strings.items():
+
+        weight = majorana_length(bits)
+
+        new_coeff = coeff * np.exp(-gamma * weight)
+
+        if abs(new_coeff) > coeff_thresh:
+            out[bits] = new_coeff
+
+    return out
+
+
+def apply_depolarizing_per_qubit(
+    strings,
+    gamma,
+    n_qubits,
+    coeff_thresh=THRESHOLD
+):
+
+    p = 1 - np.exp(-gamma)
+
+    fired = []
+
+    for q in range(n_qubits):
+
+        if np.random.random() < p:
+            fired.append(q)
+
+    if len(fired) == 0:
+        return strings
+
+    out = {}
+
+    for bits, coeff in strings.items():
+
+        killed = False
+
+        for q in fired:
+
+            g0, g1 = majorana_pair(q)
+
+            if has_bit(bits, g0) or has_bit(bits, g1):
+                killed = True
+                break
+
+        if not killed and abs(coeff) > coeff_thresh:
+            out[bits] = coeff
+
+    return out
+
+
+# =============================================================================
+# Layer Scheduling
+# =============================================================================
+
+def qubits_of_gate(gate):
+
+    return set(gate.qubits)
+
+
+def schedule_into_layers(circuit):
+
+    layers = []
+    layer_qubits = []
+
+    for idx, gate in enumerate(circuit):
+
+        gate_qs = qubits_of_gate(gate)
+
+        placed = False
+
+        for layer_idx, used in enumerate(layer_qubits):
+
+            if len(gate_qs & used) == 0:
+
+                layers[layer_idx].append(idx)
+                layer_qubits[layer_idx] |= gate_qs
+
+                placed = True
+                break
+
+        if not placed:
+
+            layers.append([idx])
+            layer_qubits.append(set(gate_qs))
+
+    return layers
+
+
+# =============================================================================
+# Reverse Heisenberg Propagation
+# =============================================================================
+
+def propagate_single_gate(strings, gate):
+
+    if gate.gate_type == "phase":
+
+        return apply_phase(
+            strings,
+            gate.qubits[0],
+            gate.theta
+        )
+
+    elif gate.gate_type == "xx_plus_yy":
+
+        return apply_xx_plus_yy(
+            strings,
+            gate.qubits[0],
+            gate.qubits[1],
+            gate.theta
+        )
+
+    elif gate.gate_type == "cphase":
+
+        return apply_cphase(
+            strings,
+            gate.qubits[0],
+            gate.qubits[1],
+            gate.theta
+        )
+
+    elif gate.gate_type == "swap":
+
+        return apply_swap(
+            strings,
+            gate.qubits[0],
+            gate.qubits[1]
+        )
+
+    elif gate.gate_type == "x":
+
+        return apply_x(
+            strings,
+            gate.qubits[0]
+        )
+
+    else:
+        raise ValueError(f"Unknown gate type {gate.gate_type}")
+
+
+# =============================================================================
+# Observable Growth Tracking
+# =============================================================================
+
+def track_observable_growth_layered(
+    circuit,
+    observable,
+    gamma=0.0,
+    mode="deterministic",
+    max_len=MAX_STR_LEN,
+    coeff_thresh=THRESHOLD,
+):
+
+    strings = dict(observable)
+
+    layers = schedule_into_layers(circuit)
+
+    sizes = [len(strings)]
+
+    print()
+    print(f"Circuit compressed into {len(layers)} layers")
+    print(f"Initial strings: {len(strings)}")
+
+    for layer_idx in reversed(range(len(layers))):
+
+        layer = layers[layer_idx]
+
+        for gate_idx in layer:
+
+            gate = circuit[gate_idx]
+
+            strings = propagate_single_gate(
+                strings,
+                gate
+            )
+
+            strings = merge_strings(strings)
+
+            strings = prune_strings(
+                strings,
+                max_len=max_len,
+                coeff_thresh=coeff_thresh
+            )
+
+        if gamma > 0:
+
+            if mode == "deterministic":
+
+                strings = damp_observable(
+                    strings,
+                    gamma,
+                    coeff_thresh
+                )
+
+            elif mode == "per_qubit":
+
+                strings = apply_depolarizing_per_qubit(
+                    strings,
+                    gamma,
+                    n_qubits=max(q for g in circuit for q in g.qubits) + 1,
+                    coeff_thresh=coeff_thresh
+                )
+
+        sizes.append(len(strings))
+
+        print(
+            f"Layer {layer_idx:3d} -> "
+            f"{len(strings):8d} strings"
+        )
+
+    return sizes
+
+
+# =============================================================================
+# Fock-State Expectation Values
+# =============================================================================
+
+def overlap_with_fock(strings, fock_state):
+
+    total = 0.0 + 0.0j
+
+    for bits, coeff in strings.items():
+
+        val = coeff
+
+        for q, occ in enumerate(fock_state):
+
+            g0, g1 = majorana_pair(q)
+
+            pair_present = (
+                has_bit(bits, g0)
+                and
+                has_bit(bits, g1)
+            )
+
+            if pair_present:
+
+                val *= (1 - 2 * occ)
+
+        total += val
+
+    return np.real(total)
+
+
+# =============================================================================
+# Expectation Value Under Noise
+# =============================================================================
+
+def expectation_value(
+    circuit,
+    observable,
+    fock_state,
+    gamma=0.0,
+    mode="deterministic",
+    max_len=MAX_STR_LEN,
+    coeff_thresh=THRESHOLD,
+):
+
+    strings = dict(observable)
+
+    layers = schedule_into_layers(circuit)
+
+    n_qubits = len(fock_state)
+
+    for layer_idx in reversed(range(len(layers))):
+
+        layer = layers[layer_idx]
+
+        for gate_idx in layer:
+
+            gate = circuit[gate_idx]
+
+            strings = propagate_single_gate(
+                strings,
+                gate
+            )
+
+            strings = merge_strings(strings)
+
+            strings = prune_strings(
+                strings,
+                max_len=max_len,
+                coeff_thresh=coeff_thresh
+            )
+
+        if gamma > 0:
+
+            if mode == "deterministic":
+
+                strings = damp_observable(
+                    strings,
+                    gamma,
+                    coeff_thresh
+                )
+
+            elif mode == "per_qubit":
+
+                strings = apply_depolarizing_per_qubit(
+                    strings,
+                    gamma,
+                    n_qubits,
+                    coeff_thresh
+                )
+
+    return overlap_with_fock(
+        strings,
+        fock_state
+    )
+
+
+# =============================================================================
+# Hubbard Hamiltonian
+# =============================================================================
+
+def build_hubbard_hamiltonian(
+    norb,
+    t=1.0,
+    U=4.0
+):
+
+    ops = []
+
+    # hopping
+    for i in range(norb - 1):
+
+        ops.append(
+            scale_operator(
+                hopping_operator(i, i + 1),
+                -t
+            )
+        )
+
+        ops.append(
+            scale_operator(
+                hopping_operator(
+                    i + norb,
+                    i + norb + 1
+                ),
+                -t
+            )
+        )
+
+    # interaction
+    for site in range(norb):
+
+        up = number_operator(site)
+        dn = number_operator(site + norb)
+
+        interaction = multiply_operators(up, dn)
+
+        ops.append(
+            scale_operator(interaction, U)
+        )
+
+    return combine_operators(ops)
+
+
+# =============================================================================
+# VQE Energy Evaluation
+# =============================================================================
+
+def vqe_energy(
+    circuit,
+    fock_state,
+    norb,
+    t=1.0,
+    U=4.0,
+    gamma=0.0,
+    mode="deterministic",
+    max_len=MAX_STR_LEN,
+):
+
+    H = build_hubbard_hamiltonian(
+        norb,
+        t=t,
+        U=U
+    )
+
+    return expectation_value(
+        circuit,
+        H,
+        fock_state,
+        gamma=gamma,
+        mode=mode,
+        max_len=max_len
+    )
+
+
+# =============================================================================
+# Monte Carlo Averaging
+# =============================================================================
+
+def expectation_value_mc(
+    circuit,
+    observable,
+    fock_state,
+    gamma=0.0,
+    mode="per_qubit",
+    n_samples=100,
+    max_len=MAX_STR_LEN,
+):
+
+    vals = []
+
+    for i in range(n_samples):
+
+        val = expectation_value(
+            circuit,
+            observable,
+            fock_state,
+            gamma=gamma,
+            mode=mode,
+            max_len=max_len
+        )
+
+        vals.append(val)
+
+        print(f"Expecation {i}:  {val}")
+
+    vals = np.array(vals)
+
+    mean = np.mean(vals)
+    stderr = np.std(vals) / np.sqrt(len(vals))
+
+    return mean, stderr
+
+
 # =============================================================================
 # Example Usage
 # =============================================================================
 
+if __name__ == "__main__":
+
+    with open("lucj_params.json", "r") as f:
+        data = json.load(f)
+
+    circuit = build_lucj_circuit(data)
+
+    print(f"Built circuit with {len(circuit)} gates")
+
+    norb = data["norb"]
+
+    n_qubits = 2 * norb
+
+    # Hartree-Fock state
+    fock_state = (
+        [1] * (norb // 2)
+        + [0] * (norb - norb // 2)
+    ) * 2
+
+    # -----------------------------------------------------------------
+    # Observable Growth
+    # -----------------------------------------------------------------
+
+    D = build_average_double_occupancy(norb)
+
+    sizes = track_observable_growth_layered(
+        circuit,
+        D,
+        gamma=1e-2,
+        mode="deterministic",
+        max_len=MAX_STR_LEN
+    )
+
+    # -----------------------------------------------------------------
+    # Energy Evaluation
+    # -----------------------------------------------------------------
+
+    E = vqe_energy(
+        circuit,
+        fock_state,
+        norb,
+        t=1.0,
+        U=4.0,
+        gamma=1e-2,
+        mode="deterministic",
+        max_len=MAX_STR_LEN
+    )
+
+    print()
+    print("VQE Energy =", E)
+    print()
+
+'''
+    # -----------------------------------------------------------------
+    # Monte Carlo Noisy Expectation
+    # -----------------------------------------------------------------
+
+    mean_D, err_D = expectation_value_mc(
+        circuit,
+        D,
+        fock_state,
+        gamma=1e-2,
+        mode="per_qubit",
+        n_samples=10,
+        max_len=MAX_STR_LEN
+    )
+
+    print()
+    print("Double Occupancy:")
+    print("Mean =", mean_D)
+    print("StdErr =", err_D)
+'''
+
+'''
 if __name__ == "__main__":
 
     with open("lucj_params.json", "r") as f:
@@ -562,8 +1170,10 @@ if __name__ == "__main__":
     final_strings = propagate_majorana(
         circuit,
         initial_strings,
-        max_len=12
+        max_len=8
     )
 
     print()
     print("Final string count:", len(final_strings))
+
+'''
