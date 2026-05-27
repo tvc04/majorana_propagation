@@ -1,4 +1,9 @@
-# Atoms: 2		Create Time: 0.166213		Simulate Time: 0.009821
-# Atoms: 4		Create Time: 0.215862		Simulate Time: 0.055416
-# Atoms: 6		Create Time: 27.655335		Simulate Time: 0.194341
-# Atoms: 8		Create Time: 29.741914		Simulate Time: 0.392460
+# Atoms: 2		Create Time: 2.311110		Simulate Time: 0.029868
+# Atoms: 4		Create Time: 2.708760		Simulate Time: 0.050128
+# Atoms: 6		Create Time: 10.572536		Simulate Time: 0.198038
+# Atoms: 8		Create Time: 28.606918		Simulate Time: 0.420964
+# Atoms: 10		Create Time: 29.475353		Simulate Time: 0.937706
+# Atoms: 12		Create Time: 29.244660		Simulate Time: 2.081828
+# Atoms: 14		Create Time: 29.629180		Simulate Time: 7.891384
+# Atoms: 16		Create Time: 39.727021		Simulate Time: 30.006530
+# Atoms: 18		Create Time: 31.970632		Simulate Time: 120.444395
