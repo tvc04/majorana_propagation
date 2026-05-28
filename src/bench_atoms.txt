@@ -1,0 +1,5 @@
+# Atoms: 2		Create Time: 0.076899		Simulate Time: 0.030072
+# Atoms: 4		Create Time: 0.307791		Simulate Time: 0.050977
+# Atoms: 6		Create Time: 0.101293		Simulate Time: 0.190300
+# Atoms: 8		Create Time: 0.129799		Simulate Time: 0.381006
+# Atoms: 10		Create Time: 0.211993		Simulate Time: 0.920121
