@@ -1,4 +1,0 @@
-Depth: 1		Create Time: 0.351903		Simulate Time: 0.211456
-Depth: 2		Create Time: 0.100912		Simulate Time: 0.177787
-Depth: 3		Create Time: 0.099399		Simulate Time: 0.179100
-Depth: 4		Create Time: 0.103225		Simulate Time: 0.177836

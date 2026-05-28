@@ -4,6 +4,7 @@ import cmath
 import time
 import sys
 import numpy as np
+import torch
 
 from qiskit import QuantumCircuit, QuantumRegister
 import ffsim
@@ -22,6 +23,7 @@ import quimb.tensor as qtn
 from cirq.contrib.qasm_import import circuit_from_qasm
 
 import matplotlib.pyplot as plt
+from typing import Optional
 
 
 def generate_hchain_geometry(natoms: int, atomic_distance: float = 0.7) -> str:
@@ -190,7 +192,7 @@ def gen_circ(natoms, depth):
     ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
         t2=np.asfortranarray(cc_.t2),
         t1=np.asfortranarray(cc_.t1),
-        n_reps=2,
+        n_reps=n_reps, # n_reps=2
         interaction_pairs=(pairs_aa, pairs_ab),
         optimize=False
     )
@@ -240,34 +242,90 @@ def simulate_cpu(circuit: cirq.Circuit, dtype: str = "float64", verbose: bool = 
     return mps
 
 
+def simulate(
+    circuit: cirq.Circuit,
+    verbose: bool = True,
+    seed: Optional[int] = None,
+    backend: str = "cpu",
+    max_bond: Optional[int] = None,
+    cutoff: float = 1e-10,
+):
+    rng = np.random.RandomState(seed)
+    max_bonds = []
+
+    qubits_to_indices = {q: i for i, q in enumerate(sorted(circuit.all_qubits()))}
+    nqubits = len(qubits_to_indices)
+
+    mps = qtn.MPS_computational_state("0" * nqubits, dtype="float64", cyclic=False)
+
+    if backend == "gpu":
+        for tensor in mps.tensors:
+            tensor.modify(
+                apply=lambda x: torch.tensor(x, dtype=torch.complex64, device="cuda")
+            )
+
+    num_ops = len(list(circuit.all_operations()))
+    for i, op in enumerate(circuit.all_operations()):
+        qubit_indices = [qubits_to_indices[q] for q in op.qubits]
+        if cirq.has_unitary(op):
+            to_apply = qu.qarray(cirq.unitary(op))
+        elif cirq.has_mixture(op):
+            ps = []
+            ops = []
+            for (p, o) in cirq.mixture(op):
+                ps.append(p)
+                ops.append(o)
+            op = ops[rng.choice(range(len(ops)), p=ps)]
+            to_apply = qu.qarray(op)
+        else:
+            raise ValueError(f"Cannot apply operation {op}")
+
+        if backend == "gpu":
+            to_apply = torch.tensor(to_apply, dtype=torch.complex64, device="cuda")
+
+        mps.gate_(
+            to_apply,
+            qubit_indices,
+            contract="swap+split",
+            max_bond=max_bond,
+            cutoff=cutoff,
+        )
+        mps.compress()
+        max_bonds.append(mps.bond_sizes())
+        if verbose:
+            print(f"\rOp {i + 1} / {num_ops}, max bond = {mps.max_bond()}", end="")
+
+    return mps, max_bonds
+
+
 def benchmark(num_atoms, depth):
     c_start = time.perf_counter()
     circuit = gen_circ(num_atoms, depth)
     c_end = time.perf_counter()
 
     s_start = time.perf_counter()
-    mps = simulate_cpu(circuit)
+    mps, bond_data = simulate(circuit)
     s_end = time.perf_counter()
 
     create_time = c_end - c_start
     simulate_time = s_end - s_start
 
-    return create_time, simulate_time
+    return create_time, simulate_time, bond_data
 
 
 def benchmark_atoms():
     create_times = []
     simulate_times = []
+    bonds = []
 
     nums = range(2,11,2)
 
-    with open("bench_atoms.txt", "w") as file:
-        for n in nums:
-            crt, sit = benchmark(n, 1)
-            create_times.append(crt)
-            simulate_times.append(sit)
-            file.write(f"# Atoms: {n}\t\tCreate Time: {crt:.6f}\t\tSimulate Time: {sit:.6f}\n")
-            print(f"\n# Atoms: {n}\t\tCreate Time: {crt:.6f}\t\tSimulate Time: {sit:.6f}\n")
+    for n in nums:
+        crt, sit, bond_data = benchmark(n, 1)
+        create_times.append(crt)
+        simulate_times.append(sit)
+        bonds.append({"n_atoms":n, "data":bond_data})
+        print(f"\n# Atoms: {n}\t\tCreate Time: {crt:.6f}\t\tSimulate Time: {sit:.6f}\n")
 
     plt.bar(nums, simulate_times, label="Simulation")
     plt.bar(nums, create_times, bottom=simulate_times, label="Creation")
@@ -279,20 +337,90 @@ def benchmark_atoms():
 
     plt.savefig("bench_atoms_plot.png")
 
+    plt.clf()
+
+    for entry in bonds:
+
+        n_atoms = entry["n_atoms"]
+        atom_data = entry["data"]
+
+        max_per_gate = []
+
+        for gate_dict in atom_data:
+            max_per_gate.append(max(gate_dict))
+
+        max_per_gate = np.array(max_per_gate)
+        x = np.arange(len(max_per_gate))
+
+        plt.plot(
+            x,
+            max_per_gate,
+            linewidth=2,
+            label=f"{n_atoms} atoms"
+        )
+
+    plt.xlabel("Gate #")
+    plt.ylabel("Max bond")
+    plt.title("Max Bond Evolution")
+    plt.legend()
+
+    plt.savefig("bench_atoms_bonds_plot.png")
+
+    plt.clf()
+
+    plt.figure(figsize=(10, 6))
+
+    for entry in reversed(bonds):
+
+        n_atoms = entry["n_atoms"]
+        atom_data = entry["data"]
+
+        means = []
+        stds = []
+
+        for gate_dict in atom_data:
+
+            values = np.array(list(gate_dict))
+
+            means.append(values.mean())
+            stds.append(values.std())
+
+        means = np.array(means)
+        stds = np.array(stds)
+
+        x = np.arange(len(means))
+
+        plt.errorbar(
+            x,
+            means,
+            yerr=stds,
+            capsize=3,
+            linewidth=1.5,
+            label=f"{n_atoms} atoms"
+        )
+
+    plt.xlabel("Gate #")
+    plt.ylabel("Mean bond dimension ± std")
+    plt.title("Bond Dimension Growth")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("bond_vs_atoms.png")
+
 
 def benchmark_depth():
     create_times = []
     simulate_times = []
+    bonds = []
 
-    nums = range(1,5)
+    nums = range(1,11,2)
 
-    with open("bench_depth.txt", "w") as file:
-        for n in nums:
-            crt, sit = benchmark(6, n) # eventually fix atoms at ~30
-            create_times.append(crt)
-            simulate_times.append(sit)
-            file.write(f"Depth: {n}\t\tCreate Time: {crt:.6f}\t\tSimulate Time: {sit:.6f}\n")
-            print(f"\nDepth: {n}\t\tCreate Time: {crt:.6f}\t\tSimulate Time: {sit:.6f}\n")
+    for n in nums:
+        crt, sit, bond_data = benchmark(6, n) # eventually fix atoms at ~30
+        create_times.append(crt)
+        simulate_times.append(sit)
+        bonds.append({"depth":n, "data":bond_data})
+        print(f"\nDepth: {n}\t\tCreate Time: {crt:.6f}\t\tSimulate Time: {sit:.6f}\n")
 
     plt.bar(nums, simulate_times, label="Simulation")
     plt.bar(nums, create_times, bottom=simulate_times, label="Creation")
@@ -303,6 +431,76 @@ def benchmark_depth():
     plt.legend()
 
     plt.savefig("bench_depth_plot.png")
+
+    plt.clf()
+
+    for entry in bonds:
+
+        depth = entry["depth"]
+        depth_data = entry["data"]
+
+        max_per_gate = []
+
+        for gate_dict in depth_data:
+            max_per_gate.append(max(gate_dict))
+
+        max_per_gate = np.array(max_per_gate)
+        x = np.arange(len(max_per_gate))
+
+        plt.plot(
+            x,
+            max_per_gate,
+            linewidth=2,
+            label=f"Depth {depth}"
+        )
+
+    plt.xlabel("Gate #")
+    plt.ylabel("Max bond")
+    plt.title("Max Bond Evolution")
+    plt.legend()
+
+    plt.savefig("bench_depth_bonds_plot.png")
+
+    plt.clf()
+
+    plt.figure(figsize=(10, 6))
+
+    for entry in reversed(bonds):
+
+        depth = entry["depth"]
+        depth_data = entry["data"]
+
+        means = []
+        stds = []
+
+        for gate_dict in depth_data:
+
+            values = np.array(list(gate_dict))
+
+            means.append(values.mean())
+            stds.append(values.std())
+
+        means = np.array(means)
+        stds = np.array(stds)
+
+        x = np.arange(len(means))
+
+        plt.errorbar(
+            x,
+            means,
+            yerr=stds,
+            capsize=3,
+            linewidth=1.5,
+            label=f"Depth {depth}"
+        )
+
+    plt.xlabel("Gate #")
+    plt.ylabel("Mean bond dimension ± std")
+    plt.title("Bond Dimension Growth")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("bond_vs_depth.png")
 
 
 if __name__ == "__main__":
