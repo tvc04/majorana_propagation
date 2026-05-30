@@ -36,7 +36,7 @@ def generate_hchain_geometry(natoms: int, atomic_distance: float = 0.7) -> str:
     return "; ".join([f"H 0 0 {i * atomic_distance}" for i in range(natoms)])
 
 
-def orbital_rotation(qc_lucj, orbital_rotation, N): # N/2 = mol.nao_nr()
+def orbital_rotation(qc_lucj, orbital_rotation, N): # N//2 = mol.nao_nr()
     nao_nr = N//2
 
     givens_rotations, phase_shifts = givens_decomposition(orbital_rotation)
@@ -222,26 +222,6 @@ def gen_circ(natoms, depth):
     return cirq_circuit
 
 
-def simulate_cpu(circuit: cirq.Circuit, dtype: str = "float64", verbose: bool = False) -> qtn.MatrixProductState:
-    qubits_to_indices = {q: i for i, q in enumerate(sorted(circuit.all_qubits()))}
-    nqubits = len(qubits_to_indices)
-
-    mps = qtn.MPS_computational_state("0" * nqubits, dtype=dtype, cyclic=False)
-    num_ops = len(list(circuit.all_operations()))
-    for i, op in enumerate(circuit.all_operations()):
-        mps.gate_(
-            qu.qarray(cirq.unitary(op)),
-            [qubits_to_indices[q] for q in op.qubits],
-            contract="swap+split",
-        )
-        if verbose:
-            print(f"\rOp {i + 1} / {num_ops}", end=" ")
-            if i % 50 == 0:
-                print(mps.bond_sizes())
-
-    return mps
-
-
 def simulate(
     circuit: cirq.Circuit,
     verbose: bool = True,
@@ -339,7 +319,7 @@ def benchmark_atoms():
 
     plt.clf()
 
-    for entry in bonds:
+    for entry in reversed(bonds):
 
         n_atoms = entry["n_atoms"]
         atom_data = entry["data"]
@@ -413,7 +393,7 @@ def benchmark_depth():
     simulate_times = []
     bonds = []
 
-    nums = range(1,11,2)
+    nums = range(1,21,2)
 
     for n in nums:
         crt, sit, bond_data = benchmark(6, n) # eventually fix atoms at ~30
@@ -434,7 +414,7 @@ def benchmark_depth():
 
     plt.clf()
 
-    for entry in bonds:
+    for entry in reversed(bonds):
 
         depth = entry["depth"]
         depth_data = entry["data"]
@@ -513,3 +493,16 @@ if __name__ == "__main__":
     elif sys.argv[1] == '2':
         benchmark_depth()
 
+'''
+ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+    t2=t2,
+    t1=t1,
+    n_reps=nlayers,
+    interaction_pairs=(pairs_aa, pairs_ab),
+    # Setting optimize=True enables the "compressed" factorization
+    optimize=True,
+    # Limit the number of optimization iterations to prevent the code cell from running
+    # too long. Removing this line may improve results.
+    options=dict(maxiter=1000),
+)
+''' # remove interaction pairs or make them a complete graph to remove locality
