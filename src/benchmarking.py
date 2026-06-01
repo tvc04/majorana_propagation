@@ -231,7 +231,7 @@ def simulate(
     cutoff: float = 1e-10,
 ):
     rng = np.random.RandomState(seed)
-    max_bonds = []
+    bonds = []
 
     qubits_to_indices = {q: i for i, q in enumerate(sorted(circuit.all_qubits()))}
     nqubits = len(qubits_to_indices)
@@ -271,11 +271,11 @@ def simulate(
             cutoff=cutoff,
         )
         mps.compress()
-        max_bonds.append(mps.bond_sizes())
+        bonds.append(mps.bond_sizes())
         if verbose:
             print(f"\rOp {i + 1} / {num_ops}, max bond = {mps.max_bond()}", end="")
 
-    return mps, max_bonds
+    return mps, bonds
 
 
 def benchmark(num_atoms, depth):
@@ -298,10 +298,13 @@ def benchmark_atoms():
     simulate_times = []
     bonds = []
 
-    nums = range(2,11,2)
+    maxAtoms = 10
+    dep = 10 # try to get to depth of 30
+    
+    nums = range(2,maxAtoms+1,2)
 
     for n in nums:
-        crt, sit, bond_data = benchmark(n, 1)
+        crt, sit, bond_data = benchmark(n, dep)
         create_times.append(crt)
         simulate_times.append(sit)
         bonds.append({"n_atoms":n, "data":bond_data})
@@ -312,7 +315,7 @@ def benchmark_atoms():
 
     plt.xlabel("# Atoms")
     plt.ylabel("Runtime (sec)")
-    plt.title("# Atoms vs Runtime")
+    plt.title(f"# Atoms vs Runtime (depth {dep})")
     plt.legend()
 
     plt.savefig("bench_atoms_plot.png")
@@ -346,57 +349,19 @@ def benchmark_atoms():
 
     plt.savefig("bench_atoms_bonds_plot.png")
 
-    plt.clf()
-
-    plt.figure(figsize=(10, 6))
-
-    for entry in reversed(bonds):
-
-        n_atoms = entry["n_atoms"]
-        atom_data = entry["data"]
-
-        means = []
-        stds = []
-
-        for gate_dict in atom_data:
-
-            values = np.array(list(gate_dict))
-
-            means.append(values.mean())
-            stds.append(values.std())
-
-        means = np.array(means)
-        stds = np.array(stds)
-
-        x = np.arange(len(means))
-
-        plt.errorbar(
-            x,
-            means,
-            yerr=stds,
-            capsize=3,
-            linewidth=1.5,
-            label=f"{n_atoms} atoms"
-        )
-
-    plt.xlabel("Gate #")
-    plt.ylabel("Mean bond dimension ± std")
-    plt.title("Bond Dimension Growth")
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    plt.savefig("bond_vs_atoms.png")
-
 
 def benchmark_depth():
     create_times = []
     simulate_times = []
     bonds = []
 
-    nums = range(1,21,2)
+    maxDepth = 30
+    numAtoms = 8 # eventually fix atoms at ~30
+    
+    nums = range(1,maxDepth+1,2)
 
     for n in nums:
-        crt, sit, bond_data = benchmark(6, n) # eventually fix atoms at ~30
+        crt, sit, bond_data = benchmark(numAtoms, n)
         create_times.append(crt)
         simulate_times.append(sit)
         bonds.append({"depth":n, "data":bond_data})
@@ -407,7 +372,7 @@ def benchmark_depth():
 
     plt.xlabel("Depth")
     plt.ylabel("Runtime (sec)")
-    plt.title("Depth vs Runtime")
+    plt.title(f"Depth vs Runtime ({numAtoms} atoms)")
     plt.legend()
 
     plt.savefig("bench_depth_plot.png")
@@ -441,57 +406,97 @@ def benchmark_depth():
 
     plt.savefig("bench_depth_bonds_plot.png")
 
-    plt.clf()
 
-    plt.figure(figsize=(10, 6))
+def bond_evolution_sim(numAtoms, depth):
+    numGates = []
+    bonds = []
 
-    for entry in reversed(bonds):
+    for n in range(2, numAtoms+1, 2):
+        circuit = None
+        gate_data = []
+        
+        for d in range(1, depth+1, 2):
+            circuit = gen_circ(n, d)
+            gate_data.append(len(list(circuit.all_operations())))
 
-        depth = entry["depth"]
-        depth_data = entry["data"]
+        numGates.append({"n_atoms":n, "gates":gate_data})
 
-        means = []
-        stds = []
+        start = time.perf_counter()
+        mps, bond_data = simulate(circuit)
+        end = time.perf_counter()
+
+        bonds.append({"n_atoms":n, "data":bond_data})
+        print(f"\n# Atoms: {n}\t\tSimulation Time: {end-start:.6f}\n")
+
+    return numGates, bonds
+
+
+def benchmark_combined():
+    dep = 20 # try to get to depth of 30
+    maxAtoms = 8 # eventually fix atoms at ~30
+    
+    numGates, bonds = bond_evolution_sim(maxAtoms, dep)
+
+    colors = [
+        "tab:blue",
+        "tab:orange",
+        "tab:green",
+        "tab:red",
+        "tab:purple",
+    ]
+
+    for atom_info, bond_info in zip(numGates, bonds):
+
+        gates = atom_info["gates"]
+        depth_data = bond_info["data"]
+
+        max_per_gate = []
 
         for gate_dict in depth_data:
+            max_per_gate.append(max(gate_dict))
 
-            values = np.array(list(gate_dict))
+        y = np.array(max_per_gate)
 
-            means.append(values.mean())
-            stds.append(values.std())
+        start = 0
 
-        means = np.array(means)
-        stds = np.array(stds)
+        for d_idx, end in enumerate(gates):
 
-        x = np.arange(len(means))
+            end = min(end, len(y))
 
-        plt.errorbar(
-            x,
-            means,
-            yerr=stds,
-            capsize=3,
-            linewidth=1.5,
-            label=f"Depth {depth}"
-        )
+            if d_idx == 0:
+                seg_start = start
+            else:
+                seg_start = start - 1   # overlap one point
 
-    plt.xlabel("Gate #")
-    plt.ylabel("Mean bond dimension ± std")
-    plt.title("Bond Dimension Growth")
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    plt.savefig("bond_vs_depth.png")
+            x = range(seg_start, end)
+
+            plt.plot(
+                x,
+                y[seg_start:end],
+                color=colors[d_idx % len(colors)],
+                label=f"{atom_info['n_atoms']} atoms depth {2*d_idx+1}"
+            )
+
+            start = end
+
+    plt.xlabel("Gate # (color changes at every odd layer)")
+    plt.ylabel("Max bond")
+    plt.title(f"Max Bond Evolution ({2}-{maxAtoms} atoms)")
+
+    plt.savefig("bench_combined_plot.png")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Correct usage: python benchmarking.py <test_num>\nTests: 1 = # atoms, 2 = depth")
-    elif sys.argv[1] != '1' and sys.argv[1] != '2':
-        print("Argument must be 1 or 2 (1 = # atoms, 2 = depth)")
+        print("Correct usage: python benchmarking.py <test_num>\nTests: 1 = # atoms, 2 = depth, 3 = combined")
+    elif sys.argv[1] != '1' and sys.argv[1] != '2' and sys.argv[1] != '3':
+        print("Argument must be 1, 2 or 3 (1 = # atoms, 2 = depth, 3 = combined)")
     elif sys.argv[1] == '1':
         benchmark_atoms()
     elif sys.argv[1] == '2':
         benchmark_depth()
+    elif sys.argv[1] == '3':
+        benchmark_combined()
 
 '''
 ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
