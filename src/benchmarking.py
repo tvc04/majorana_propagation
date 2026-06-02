@@ -446,7 +446,7 @@ def bond_evolution_sim(numAtoms, depth, locality):
     return numGates, bonds
 
 
-def benchmark_locality():
+def benchmark_local():
     dep = 20 # try to get to depth of 30
     maxAtoms = 16 # eventually fix atoms at ~30
     
@@ -502,6 +502,19 @@ def benchmark_locality():
 
     plt.clf()
 
+
+def benchmark_nonlocal():
+    dep = 20 # try to get to depth of 30
+    maxAtoms = 14 # eventually fix atoms at ~30
+
+    colors = [
+        "tab:blue",
+        "tab:orange",
+        "tab:green",
+        "tab:red",
+        "tab:purple",
+    ]
+
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, False) # UCJ sim
 
     for atom_info, bond_info in zip(numGates, bonds):
@@ -556,15 +569,18 @@ if __name__ == "__main__":
     '''
 
     if len(sys.argv) != 2:
-        print("Correct usage: python benchmarking.py <test_num>\nTests: 1 = # atoms, 2 = depth, 3 = combined")
-    elif sys.argv[1] != '1' and sys.argv[1] != '2' and sys.argv[1] != '3':
-        print("Argument must be 1, 2 or 3 (1 = # atoms, 2 = depth, 3 = combined)")
+        print("Correct usage: python benchmarking.py <test_num>\nTests: 1 = # atoms, 2 = depth, 3 = local, 4 = nonlocal")
+    elif sys.argv[1] != '1' and sys.argv[1] != '2' and sys.argv[1] != '3' and sys.argv[1] != '4':
+        print("Argument must be 1, 2 or 3 (1 = # atoms, 2 = depth, 3 = local, 4 = nonlocal)")
     elif sys.argv[1] == '1':
         benchmark_atoms()
     elif sys.argv[1] == '2':
         benchmark_depth()
     elif sys.argv[1] == '3':
-        benchmark_locality()
+        benchmark_local()
+    elif sys.argv[1] == '4':
+        benchmark_nonlocal()
+
 
 '''
     ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
