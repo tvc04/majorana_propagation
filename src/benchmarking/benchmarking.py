@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import torch
 
+import qiskit
 from qiskit import QuantumCircuit, QuantumRegister
 import ffsim
 import pyscf
@@ -34,55 +35,6 @@ def generate_hchain_geometry(natoms: int, atomic_distance: float = 0.7) -> str:
         atomic_distance: Equal spacing between Hydrogen atoms.
     """
     return "; ".join([f"H 0 0 {i * atomic_distance}" for i in range(natoms)])
-
-
-def orbital_rotation(qc_lucj, orbital_rotation, N): # N//2 = mol.nao_nr()
-    nao_nr = N//2
-
-    givens_rotations, phase_shifts = givens_decomposition(orbital_rotation)
-    for c, s, i, j in givens_rotations:
-        # print(i, j)
-        qc_lucj.append(XXPlusYYGate(theta = 2 * math.acos(c), beta = cmath.phase(s) - 0.5 * math.pi), [i, j])
-        qc_lucj.append(XXPlusYYGate(theta = 2 * math.acos(c), beta = cmath.phase(s) - 0.5 * math.pi), [i + nao_nr, j + nao_nr])
-
-    for i, phase_shift in enumerate(phase_shifts):
-        qc_lucj.p(cmath.phase(phase_shift), i)
-        qc_lucj.p(cmath.phase(phase_shift), i + nao_nr)
-
-    qc_lucj.barrier()
-
-
-def J_op(qc_lucj, diag_mat_aa, diag_mat_ab, diag_mat_bb, time, norb):
-    for sigma, this_mat in enumerate([diag_mat_aa, diag_mat_bb]):
-        if this_mat is None:
-            print('______________________')
-            print('_________NONE_________')
-            print('______________________')
-        if this_mat is not None:
-            for i in range(norb):
-                if this_mat[i, i]:
-                    # print(i + sigma * norb)
-                    qc_lucj.p(-0.5 * this_mat[i, i] * time, i + sigma * norb)
-            for i, j in itertools.combinations(range(norb), 2):
-                if this_mat[i, j]:
-                    # print(i + sigma * norb, j + sigma * norb)
-                    qc_lucj.cp(-this_mat[i, j] * time, i + sigma * norb, j + sigma * norb)
-    # qc_lucj.barrier()
-    if diag_mat_ab is not None:
-        for i in range(norb):
-            if diag_mat_ab[i, i]:
-                qc_lucj.cp(-diag_mat_ab[i, i] * time, i, i + norb)
-                
-        for i, j in itertools.combinations(range(norb), 2):
-            
-            if diag_mat_ab[i, j]:
-                qc_lucj.cp(-diag_mat_ab[i, j] * time, i, j + norb)
-                
-            if diag_mat_ab[j, i]:
-                qc_lucj.cp(-diag_mat_ab[j, i] * time, j, i + norb)
-                
-
-    qc_lucj.barrier()
 
 
 def gen_circ(natoms, depth, local=True):
@@ -169,65 +121,40 @@ def gen_circ(natoms, depth, local=True):
             n_reps=n_reps,
             interaction_pairs=(pairs_aa, pairs_ab),
             # Setting optimize=True enables the "compressed" factorization
-            optimize=False,
+            optimize=True,
             # Limit the number of optimization iterations to prevent the code cell from running
             # too long. Removing this line may improve results.
-            #options=dict(maxiter=1000),
+            options=dict(maxiter=1000),
         )
     else:
-        '''
-        pairs_aa = [
-            (i, j)
-            for i in range(norb)
-            for j in range(i + 1, norb)
-        ]
-        pairs_ab = [
-            (i, j)
-            for i in range(norb)
-            for j in range(i, norb)
-        ]
-        '''
         ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
             t2=np.asfortranarray(t2),
             t1=np.asfortranarray(t1),
             n_reps=n_reps,
-            #interaction_pairs=(pairs_aa, pairs_ab),
             interaction_pairs=None,
             # Setting optimize=True enables the "compressed" factorization
             optimize=False,
             # Limit the number of optimization iterations to prevent the code cell from running
             # too long. Removing this line may improve results.
-            #options=dict(maxiter=1000),
+            options=dict(maxiter=1000),
         ) # remove interaction pairs or make them a complete graph to remove locality
 
-    # create an empty quantum circuit
     qubits = QuantumRegister(2 * norb, name="q")
     circuit = QuantumCircuit(qubits)
-
-    # prepare Hartree-Fock state as the reference state and append it to the quantum circuit
     circuit.append(ffsim.qiskit.PrepareHartreeFockJW(norb, nelec), qubits)
-
-    # apply the UCJ operator to the reference state
     circuit.append(ffsim.qiskit.UCJOpSpinBalancedJW(ucj_op), qubits)
-    # circuit.measure_all()
-
-    qc_lucj = QuantumCircuit(mol.nao_nr() * 2)
-
-    orbital_rotations = ucj_op.orbital_rotations
-    diag_mats = ucj_op.diag_coulomb_mats
-    final_orbital_rotation = ucj_op.final_orbital_rotation
-    for i in range(mol.nelectron // 2):
-        qc_lucj.x(i)
-        qc_lucj.x(i + mol.nao_nr())
-    for orb_rot, (diag_mat_aa, diag_mat_ab) in zip(orbital_rotations, diag_mats):
-        orbital_rotation(qc_lucj, orb_rot.T.conj(), N)
-        J_op(qc_lucj, diag_mat_aa, diag_mat_ab, diag_mat_aa, time=-1, norb=mol.nao_nr())
-        orbital_rotation(qc_lucj, orb_rot, N)
-    if ucj_op.final_orbital_rotation is not None:
-        orbital_rotation(qc_lucj, ucj_op.final_orbital_rotation, N)
-
+    
+    if pass_manager is not None:
+        qc_lucj = pass_manager.run(circuit)
+    else:
+        qc_lucj = qiskit.transpile(circuit, backend=backend, optimization_level=3)
+    
     from qiskit import qasm2
     qasm_str = qasm2.dumps(qc_lucj)
+
+
+    with open("assembled_circuit.txt", "w") as f:
+        f.write(qasm_str)
 
     clean_qs = ""
     for s in qasm_str.splitlines():
@@ -314,7 +241,7 @@ def benchmark_atoms():
     simulate_times = []
     bonds = []
 
-    maxAtoms = 16 # try to reach ~40 atoms
+    maxAtoms = 6 # try to reach ~40 atoms
     dep = 20 # try to fix to depth of 30
     
     nums = range(2,maxAtoms+1,2)
@@ -449,7 +376,7 @@ def bond_evolution_sim(numAtoms, depth, locality):
 
 def benchmark_local():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 16 # eventually fix atoms at ~30
+    maxAtoms = 8 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # LUCJ sim
 
@@ -504,7 +431,7 @@ def benchmark_local():
 
 def benchmark_nonlocal():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 16 # eventually fix atoms at ~30
+    maxAtoms = 8 # eventually fix atoms at ~30
 
     colors = [
         "tab:blue",
@@ -558,14 +485,6 @@ def benchmark_nonlocal():
 
 
 if __name__ == "__main__":
-    '''
-    with open("comp1.txt", "w") as file:
-        lucj = gen_circ(10,10,True)
-        file.write(lucj.to_qasm())
-    with open("comp2.txt","w") as file:
-        ucj = gen_circ(10,10,False)
-        file.write(ucj.to_qasm())
-    '''
 
     if len(sys.argv) != 2:
         print("Correct usage: python benchmarking.py <test_num>\nTests: 1 = # atoms, 2 = depth, 3 = local, 4 = nonlocal")
@@ -582,15 +501,15 @@ if __name__ == "__main__":
 
 
 '''
-    ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
-        t2=t2,
-        t1=t1,
-        n_reps=nlayers,
-        #interaction_pairs=(pairs_aa, pairs_ab),
-        # Setting optimize=True enables the "compressed" factorization
-        optimize=True,
-        # Limit the number of optimization iterations to prevent the code cell from running
-        # too long. Removing this line may improve results.
-        options=dict(maxiter=1000),
-    ) # remove interaction pairs or make them a complete graph to remove locality
-    '''
+        ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+            t2=np.asfortranarray(t2),
+            t1=np.asfortranarray(t1),
+            n_reps=n_reps,
+            interaction_pairs=(pairs_aa, pairs_ab),
+            # Setting optimize=True enables the "compressed" factorization
+            optimize=False,
+            # Limit the number of optimization iterations to prevent the code cell from running
+            # too long. Removing this line may improve results.
+            #options=dict(maxiter=1000),
+        ) # remove interation_pairs for UCJ simulation
+'''
