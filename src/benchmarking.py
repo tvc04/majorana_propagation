@@ -85,7 +85,7 @@ def J_op(qc_lucj, diag_mat_aa, diag_mat_ab, diag_mat_bb, time, norb):
     qc_lucj.barrier()
 
 
-def gen_circ(natoms, depth):
+def gen_circ(natoms, depth, local=True):
     mol = pyscf.gto.Mole()
     mol.build(
         atom=generate_hchain_geometry(natoms),
@@ -160,17 +160,45 @@ def gen_circ(natoms, depth):
         pass_manager = None
 
     # Create the LUCJ ansatz operator
-    ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
-        t2=np.asfortranarray(t2),
-        t1=np.asfortranarray(t1),
-        n_reps=n_reps,
-        interaction_pairs=(pairs_aa, pairs_ab),
-        # Setting optimize=True enables the "compressed" factorization
-        optimize=False,
-        # Limit the number of optimization iterations to prevent the code cell from running
-        # too long. Removing this line may improve results.
-        #options=dict(maxiter=1000),
-    )
+    ucj_op = None
+
+    if local:
+        ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+            t2=np.asfortranarray(t2),
+            t1=np.asfortranarray(t1),
+            n_reps=n_reps,
+            interaction_pairs=(pairs_aa, pairs_ab),
+            # Setting optimize=True enables the "compressed" factorization
+            optimize=False,
+            # Limit the number of optimization iterations to prevent the code cell from running
+            # too long. Removing this line may improve results.
+            #options=dict(maxiter=1000),
+        )
+    else:
+        '''
+        pairs_aa = [
+            (i, j)
+            for i in range(norb)
+            for j in range(i + 1, norb)
+        ]
+        pairs_ab = [
+            (i, j)
+            for i in range(norb)
+            for j in range(i, norb)
+        ]
+        '''
+        ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+            t2=np.asfortranarray(t2),
+            t1=np.asfortranarray(t1),
+            n_reps=n_reps,
+            #interaction_pairs=(pairs_aa, pairs_ab),
+            interaction_pairs=None,
+            # Setting optimize=True enables the "compressed" factorization
+            optimize=False,
+            # Limit the number of optimization iterations to prevent the code cell from running
+            # too long. Removing this line may improve results.
+            #options=dict(maxiter=1000),
+        ) # remove interaction pairs or make them a complete graph to remove locality
 
     # create an empty quantum circuit
     qubits = QuantumRegister(2 * norb, name="q")
@@ -184,18 +212,6 @@ def gen_circ(natoms, depth):
     # circuit.measure_all()
 
     qc_lucj = QuantumCircuit(mol.nao_nr() * 2)
-    t1, t2 = cc_.t1, cc_.t2
-
-    norb = mol.nao_nr()
-    pairs_aa = [(p, p + 1) for p in range(norb - 1)]   # same-spin line
-    pairs_ab = [(p, p) for p in range(norb)]           # opposite-spin on-site
-    ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
-        t2=np.asfortranarray(cc_.t2),
-        t1=np.asfortranarray(cc_.t1),
-        n_reps=n_reps, # n_reps=2
-        interaction_pairs=(pairs_aa, pairs_ab),
-        optimize=False
-    )
 
     orbital_rotations = ucj_op.orbital_rotations
     diag_mats = ucj_op.diag_coulomb_mats
@@ -228,7 +244,7 @@ def simulate(
     seed: Optional[int] = None,
     backend: str = "cpu",
     max_bond: Optional[int] = None,
-    cutoff: float = 1e-10,
+    cutoff: float = 0,
 ):
     rng = np.random.RandomState(seed)
     bonds = []
@@ -298,8 +314,8 @@ def benchmark_atoms():
     simulate_times = []
     bonds = []
 
-    maxAtoms = 10
-    dep = 10 # try to get to depth of 30
+    maxAtoms = 16 # try to reach ~40 atoms
+    dep = 20 # try to fix to depth of 30
     
     nums = range(2,maxAtoms+1,2)
 
@@ -344,7 +360,7 @@ def benchmark_atoms():
 
     plt.xlabel("Gate #")
     plt.ylabel("Max bond")
-    plt.title("Max Bond Evolution")
+    plt.title(f"Max Bond Evolution (depth {dep})")
     plt.legend()
 
     plt.savefig("bench_atoms_bonds_plot.png")
@@ -356,7 +372,7 @@ def benchmark_depth():
     bonds = []
 
     maxDepth = 30
-    numAtoms = 8 # eventually fix atoms at ~30
+    numAtoms = 12 # eventually fix atoms at ~30
     
     nums = range(1,maxDepth+1,2)
 
@@ -399,15 +415,14 @@ def benchmark_depth():
             label=f"Depth {depth}"
         )
 
-    plt.xlabel("Gate #")
+    plt.xlabel("Gate # (color changes at every odd layer)")
     plt.ylabel("Max bond")
-    plt.title("Max Bond Evolution")
-    plt.legend()
+    plt.title(f"Max Bond Evolution ({numAtoms} atoms)")
 
     plt.savefig("bench_depth_bonds_plot.png")
 
 
-def bond_evolution_sim(numAtoms, depth):
+def bond_evolution_sim(numAtoms, depth, locality):
     numGates = []
     bonds = []
 
@@ -416,7 +431,7 @@ def bond_evolution_sim(numAtoms, depth):
         gate_data = []
         
         for d in range(1, depth+1, 2):
-            circuit = gen_circ(n, d)
+            circuit = gen_circ(n, d, locality)
             gate_data.append(len(list(circuit.all_operations())))
 
         numGates.append({"n_atoms":n, "gates":gate_data})
@@ -431,11 +446,11 @@ def bond_evolution_sim(numAtoms, depth):
     return numGates, bonds
 
 
-def benchmark_combined():
+def benchmark_locality():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 8 # eventually fix atoms at ~30
+    maxAtoms = 16 # eventually fix atoms at ~30
     
-    numGates, bonds = bond_evolution_sim(maxAtoms, dep)
+    numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # LUCJ sim
 
     colors = [
         "tab:blue",
@@ -481,12 +496,65 @@ def benchmark_combined():
 
     plt.xlabel("Gate # (color changes at every odd layer)")
     plt.ylabel("Max bond")
-    plt.title(f"Max Bond Evolution ({2}-{maxAtoms} atoms)")
+    plt.title(f"Local Ansatz Max Bond Evolution ({2}-{maxAtoms} atoms)")
 
-    plt.savefig("bench_combined_plot.png")
+    plt.savefig("bench_local_plot.png")
+
+    plt.clf()
+
+    numGates, bonds = bond_evolution_sim(maxAtoms, dep, False) # UCJ sim
+
+    for atom_info, bond_info in zip(numGates, bonds):
+
+        gates = atom_info["gates"]
+        depth_data = bond_info["data"]
+
+        max_per_gate = []
+
+        for gate_dict in depth_data:
+            max_per_gate.append(max(gate_dict))
+
+        y = np.array(max_per_gate)
+
+        start = 0
+
+        for d_idx, end in enumerate(gates):
+
+            end = min(end, len(y))
+
+            if d_idx == 0:
+                seg_start = start
+            else:
+                seg_start = start - 1   # overlap one point
+
+            x = range(seg_start, end)
+
+            plt.plot(
+                x,
+                y[seg_start:end],
+                color=colors[d_idx % len(colors)],
+                label=f"{atom_info['n_atoms']} atoms depth {2*d_idx+1}"
+            )
+
+            start = end
+
+    plt.xlabel("Gate # (color changes at every odd layer)")
+    plt.ylabel("Max bond")
+    plt.title(f"Non-Local Ansatz Max Bond Evolution ({2}-{maxAtoms} atoms)")
+
+    plt.savefig("bench_nonlocal_plot.png")
 
 
 if __name__ == "__main__":
+    '''
+    with open("comp1.txt", "w") as file:
+        lucj = gen_circ(10,10,True)
+        file.write(lucj.to_qasm())
+    with open("comp2.txt","w") as file:
+        ucj = gen_circ(10,10,False)
+        file.write(ucj.to_qasm())
+    '''
+
     if len(sys.argv) != 2:
         print("Correct usage: python benchmarking.py <test_num>\nTests: 1 = # atoms, 2 = depth, 3 = combined")
     elif sys.argv[1] != '1' and sys.argv[1] != '2' and sys.argv[1] != '3':
@@ -496,18 +564,18 @@ if __name__ == "__main__":
     elif sys.argv[1] == '2':
         benchmark_depth()
     elif sys.argv[1] == '3':
-        benchmark_combined()
+        benchmark_locality()
 
 '''
-ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
-    t2=t2,
-    t1=t1,
-    n_reps=nlayers,
-    interaction_pairs=(pairs_aa, pairs_ab),
-    # Setting optimize=True enables the "compressed" factorization
-    optimize=True,
-    # Limit the number of optimization iterations to prevent the code cell from running
-    # too long. Removing this line may improve results.
-    options=dict(maxiter=1000),
-)
-''' # remove interaction pairs or make them a complete graph to remove locality
+    ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+        t2=t2,
+        t1=t1,
+        n_reps=nlayers,
+        #interaction_pairs=(pairs_aa, pairs_ab),
+        # Setting optimize=True enables the "compressed" factorization
+        optimize=True,
+        # Limit the number of optimization iterations to prevent the code cell from running
+        # too long. Removing this line may improve results.
+        options=dict(maxiter=1000),
+    ) # remove interaction pairs or make them a complete graph to remove locality
+    '''
