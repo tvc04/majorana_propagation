@@ -449,7 +449,7 @@ def bond_evolution_sim(numAtoms, depth, locality):
 
 def benchmark_local():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 12 # eventually fix atoms at ~30
+    maxAtoms = 16 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # LUCJ sim
 
