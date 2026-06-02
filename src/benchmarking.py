@@ -427,6 +427,7 @@ def bond_evolution_sim(numAtoms, depth, locality):
     bonds = []
 
     for n in range(2, numAtoms+1, 2):
+    #for n in range(numAtoms, numAtoms+1, 2):
         circuit = None
         gate_data = []
         
@@ -448,7 +449,7 @@ def bond_evolution_sim(numAtoms, depth, locality):
 
 def benchmark_local():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 16 # eventually fix atoms at ~30
+    maxAtoms = 12 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # LUCJ sim
 
@@ -500,12 +501,10 @@ def benchmark_local():
 
     plt.savefig("bench_local_plot.png")
 
-    plt.clf()
-
 
 def benchmark_nonlocal():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 14 # eventually fix atoms at ~30
+    maxAtoms = 16 # eventually fix atoms at ~30
 
     colors = [
         "tab:blue",
@@ -553,7 +552,7 @@ def benchmark_nonlocal():
 
     plt.xlabel("Gate # (color changes at every odd layer)")
     plt.ylabel("Max bond")
-    plt.title(f"Non-Local Ansatz Max Bond Evolution ({2}-{maxAtoms} atoms)")
+    plt.title(f"Non-Local Ansatz Max Bond Evolution ({maxAtoms} atoms)")
 
     plt.savefig("bench_nonlocal_plot.png")
 
