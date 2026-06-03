@@ -1,6 +1,3 @@
-import itertools
-import math
-import cmath
 import time
 import sys
 import numpy as np
@@ -11,11 +8,8 @@ from qiskit import QuantumCircuit, QuantumRegister
 import ffsim
 import pyscf
 from pyscf import gto, scf, cc
-from ffsim.linalg import givens_decomposition
-from qiskit.circuit.library import XXPlusYYGate
 
 from qiskit.providers.fake_provider import GenericBackendV2
-from qiskit.transpiler import CouplingMap
 
 import cirq
 import quimb as qu
@@ -133,7 +127,7 @@ def gen_circ(natoms, depth, local=True):
             n_reps=n_reps,
             interaction_pairs=None,
             # Setting optimize=True enables the "compressed" factorization
-            optimize=False,
+            optimize=True,
             # Limit the number of optimization iterations to prevent the code cell from running
             # too long. Removing this line may improve results.
             options=dict(maxiter=1000),
@@ -241,7 +235,7 @@ def benchmark_atoms():
     simulate_times = []
     bonds = []
 
-    maxAtoms = 6 # try to reach ~40 atoms
+    maxAtoms = 12 # try to reach ~40 atoms
     dep = 20 # try to fix to depth of 30
     
     nums = range(2,maxAtoms+1,2)
@@ -298,8 +292,8 @@ def benchmark_depth():
     simulate_times = []
     bonds = []
 
-    maxDepth = 30
-    numAtoms = 12 # eventually fix atoms at ~30
+    maxDepth = 20 # eventually fix depth at 30
+    numAtoms = 8 # eventually fix atoms at ~30
     
     nums = range(1,maxDepth+1,2)
 
@@ -342,7 +336,7 @@ def benchmark_depth():
             label=f"Depth {depth}"
         )
 
-    plt.xlabel("Gate # (color changes at every odd layer)")
+    plt.xlabel("Gate # (different colors for every odd layer)")
     plt.ylabel("Max bond")
     plt.title(f"Max Bond Evolution ({numAtoms} atoms)")
 
@@ -354,7 +348,6 @@ def bond_evolution_sim(numAtoms, depth, locality):
     bonds = []
 
     for n in range(2, numAtoms+1, 2):
-    #for n in range(numAtoms, numAtoms+1, 2):
         circuit = None
         gate_data = []
         
@@ -376,7 +369,7 @@ def bond_evolution_sim(numAtoms, depth, locality):
 
 def benchmark_local():
     dep = 20 # try to get to depth of 30
-    maxAtoms = 8 # eventually fix atoms at ~30
+    maxAtoms = 10 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # LUCJ sim
 
@@ -424,7 +417,7 @@ def benchmark_local():
 
     plt.xlabel("Gate # (color changes at every odd layer)")
     plt.ylabel("Max bond")
-    plt.title(f"Local Ansatz Max Bond Evolution ({2}-{maxAtoms} atoms)")
+    plt.title(f"Local Ansatz Max Bond Evolution (2-{maxAtoms} atoms)")
 
     plt.savefig("bench_local_plot.png")
 
@@ -479,7 +472,7 @@ def benchmark_nonlocal():
 
     plt.xlabel("Gate # (color changes at every odd layer)")
     plt.ylabel("Max bond")
-    plt.title(f"Non-Local Ansatz Max Bond Evolution ({maxAtoms} atoms)")
+    plt.title(f"Non-Local Ansatz Max Bond Evolution (2-{maxAtoms} atoms)")
 
     plt.savefig("bench_nonlocal_plot.png")
 
