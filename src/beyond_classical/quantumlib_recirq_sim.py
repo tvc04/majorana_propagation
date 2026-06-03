@@ -496,3 +496,4 @@ if __name__ == "__main__":
         benchmark_grid()
     elif sys.argv[1] == '2':
         benchmark_bristlecone()
+
