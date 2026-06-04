@@ -146,10 +146,6 @@ def gen_circ(natoms, depth, local=True):
     from qiskit import qasm2
     qasm_str = qasm2.dumps(qc_lucj)
 
-
-    with open("assembled_circuit.txt", "w") as f:
-        f.write(qasm_str)
-
     clean_qs = ""
     for s in qasm_str.splitlines():
         if not s.startswith("barrier"):
@@ -235,8 +231,8 @@ def benchmark_atoms():
     simulate_times = []
     bonds = []
 
-    maxAtoms = 12 # try to reach ~40 atoms
-    dep = 20 # try to fix to depth of 30
+    maxAtoms = 20 # try to reach ~40 atoms
+    dep = 30 # try to fix to depth of 30
     
     nums = range(2,maxAtoms+1,2)
 
@@ -292,8 +288,8 @@ def benchmark_depth():
     simulate_times = []
     bonds = []
 
-    maxDepth = 20 # eventually fix depth at 30
-    numAtoms = 8 # eventually fix atoms at ~30
+    maxDepth = 30 # eventually fix depth at 30
+    numAtoms = 20 # eventually fix atoms at ~30
     
     nums = range(1,maxDepth+1,2)
 
@@ -368,8 +364,8 @@ def bond_evolution_sim(numAtoms, depth, locality):
 
 
 def benchmark_local():
-    dep = 20 # try to get to depth of 30
-    maxAtoms = 10 # eventually fix atoms at ~30
+    dep = 30 # try to get to depth of 30
+    maxAtoms = 20 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # LUCJ sim
 
@@ -423,8 +419,8 @@ def benchmark_local():
 
 
 def benchmark_nonlocal():
-    dep = 20 # try to get to depth of 30
-    maxAtoms = 8 # eventually fix atoms at ~30
+    dep = 30 # try to get to depth of 30
+    maxAtoms = 20 # eventually fix atoms at ~30
 
     colors = [
         "tab:blue",

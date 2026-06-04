@@ -377,8 +377,8 @@ def bond_evolution_sim(numAtoms, depth, bristlecone):
 
 
 def benchmark_grid():
-    dep = 10 # try to get to depth of 30
-    maxAtoms = 8 # eventually fix atoms at ~30
+    dep = 20 # try to get to depth of 30
+    maxAtoms = 20 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, False) # Grid sim
 
@@ -432,8 +432,8 @@ def benchmark_grid():
 
 
 def benchmark_bristlecone():
-    dep = 10 # try to get to depth of 30
-    maxAtoms = 10 # eventually fix atoms at ~30
+    dep = 20 # try to get to depth of 30
+    maxAtoms = 20 # eventually fix atoms at ~30
     
     numGates, bonds = bond_evolution_sim(maxAtoms, dep, True) # Bristlecone sim
 
