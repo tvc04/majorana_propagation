@@ -85,8 +85,6 @@ def simulate(
         )
         mps.compress()
         if verbose:
-            if i % 100 == 0:
-                print(f"\n{i} / {num_ops}")
             max_bonds.append(mps.max_bond())
             print(f"\rOp {i + 1} / {num_ops}, max bond = {mps.max_bond()}", end="")
             

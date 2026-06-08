@@ -86,8 +86,6 @@ def simulate(
         )
         mps.compress()
         if verbose:
-            if i % 100 == 0:
-                print(f"\n{i} / {num_ops}")
             max_bonds.append(mps.max_bond())
             print(f"\rOp {i + 1} / {num_ops}, max bond = {mps.max_bond()}", end="")
             
@@ -242,7 +240,7 @@ def sim_lucj_and_ucj(natoms: int, rows: int, cols: int):
 
 if __name__ == "__main__":
 
-    num_qubits = 20
+    num_qubits = 16
 
     start = int(np.sqrt(num_qubits))
     rows, cols = 0,0
