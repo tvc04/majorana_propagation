@@ -36,7 +36,7 @@ nlayers = metadata["n_layers"]
 
 plt.figure(figsize=(10,5))
 
-plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits}, {nlayers}/{nlayers//2} layers)")
+plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers}/{nlayers//2} layers)")
 
 plt.semilogy(lucj_sq, "--^", markevery=10, color="C0", mec="black", alpha=0.5, label=f"LUCJ Square")
 plt.semilogy(ucj_sq, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"UCJ Square")

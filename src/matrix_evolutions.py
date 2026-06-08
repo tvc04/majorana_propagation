@@ -302,7 +302,7 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
 
 if __name__ == "__main__":
 
-    num_qubits = 20
+    num_qubits = 16
 
     start = int(np.sqrt(num_qubits))
     rows, cols = 0,0
