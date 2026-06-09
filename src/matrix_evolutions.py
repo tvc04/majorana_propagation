@@ -21,6 +21,8 @@ from cirq.contrib import qasm_import
 import quimb as qu
 import quimb.tensor as qtn
 
+from beyond_classical.quantumlib_recirq_sim import generate_boixo_2018_beyond_classical_v2
+
 
 nlayers: int = 20
 
@@ -94,6 +96,20 @@ def simulate(
     return mps
 
 
+def sim_rcs(rows: int, cols: int):
+    circuit = generate_boixo_2018_beyond_classical_v2(
+        cirq.GridQubit.rect(rows, cols),
+        cz_depth=24,
+        seed=1,
+    )
+
+    print("\nSIMULATING RCS\n")
+
+    mps, max_bonds = simulate(circuit, verbose=True)
+
+    return max_bonds
+
+
 def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     damping: float = 0.001325
     cutoff: float = 1e-6
@@ -135,13 +151,17 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     t1 = ccsd.t1
     t2 = ccsd.t2
 
-    coupling_map = CouplingMap.from_grid(
-        num_rows=rows,
-        num_columns=cols
-    )
+    coupling_map = None
+    if connectivity == "square":
+        coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
     if connectivity == "all":
         coupling_map = CouplingMap.from_full(rows * cols)
-        connectivity = "square"
+    if connectivity == "heavy-hex":
+        d = 1
+        while (5 * (d**2) - (2 * d) - 1) // 2 < rows * cols: # formula relating distance and qubits from ffsim's docs
+            d += 2
+        coupling_map = CouplingMap.from_heavy_hex(d)
+    
     backend = GenericBackendV2(
         coupling_map.size(),
         coupling_map=coupling_map,
@@ -238,13 +258,17 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     t1 = ccsd.t1
     t2 = ccsd.t2
 
-    coupling_map = CouplingMap.from_grid(
-        num_rows=rows,
-        num_columns=cols
-    )
+    coupling_map = None
+    if connectivity == "square":
+        coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
     if connectivity == "all":
         coupling_map = CouplingMap.from_full(rows * cols)
-        connectivity = "square"
+    if connectivity == "heavy-hex":
+        d = 1
+        while (5 * (d**2) - (2 * d) - 1) // 2 < rows * cols: # formula relating distance and qubits from ffsim's docs
+            d += 2
+        coupling_map = CouplingMap.from_heavy_hex(d)
+    
     backend = GenericBackendV2(
         coupling_map.size(),
         coupling_map=coupling_map,
@@ -316,7 +340,7 @@ if __name__ == "__main__":
 
     test_num = int(sys.argv[1])
 
-    datasets = ["lucj_sq","ucj_sq","lucj_hh","ucj_hh","lucj_aa","ucj_aa"]
+    datasets = ["lucj_sq","ucj_sq","lucj_hh","ucj_hh","lucj_aa","ucj_aa","rcs"]
 
     output_data = None
     nqubits = 0
@@ -344,6 +368,10 @@ if __name__ == "__main__":
     elif (test_num == 6):
         ucj_aa, nqubits = sim_ucj(atoms, rows, cols, "all")
         output_data = ucj_aa
+
+    elif (test_num == 7):
+        output_data = sim_rcs(rows, cols)
+
 
     output = {
         "n_qubits": nqubits,
