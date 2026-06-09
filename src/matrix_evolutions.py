@@ -173,17 +173,19 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     pairs_ab = [(p, p) for p in range(norb)]  # None  # Let generate_lucj_pass_manager determine the alpha-beta interactions
 
     # Create pass manager
-    try:
-        pass_manager, pairs_ab = ffsim.qiskit.generate_lucj_pass_manager(
-            backend=backend,
-            norb=norb,
-            connectivity=connectivity,
-            interaction_pairs=(pairs_aa, pairs_ab),
-            optimization_level=3,
-        )
-        print("Unable to generate ffsim pass manager")
-    except RuntimeError:
-        pass_manager = None
+    pass_manager = None
+    if connectivity != "all":
+        try:
+            pass_manager, pairs_ab = ffsim.qiskit.generate_lucj_pass_manager(
+                backend=backend,
+                norb=norb,
+                connectivity=connectivity,
+                interaction_pairs=(pairs_aa, pairs_ab),
+                optimization_level=3,
+            )
+        except RuntimeError:
+            print("Unable to generate ffsim pass manager")
+            pass_manager = None
 
     print("pairs_aa:", pairs_aa)
     print("pairs_ab:", pairs_ab)
@@ -281,17 +283,19 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     pairs_ab = [(p, p) for p in range(norb)]  # None  # Let generate_lucj_pass_manager determine the alpha-beta interactions
 
     # Create pass manager
-    try:
-        pass_manager, pairs_ab = ffsim.qiskit.generate_lucj_pass_manager(
-            backend=backend,
-            norb=norb,
-            connectivity=connectivity,
-            interaction_pairs=(pairs_aa, pairs_ab),
-            optimization_level=3,
-        )
-        print("Unable to generate ffsim pass manager")
-    except RuntimeError:
-        pass_manager = None
+    pass_manager = None
+    if connectivity != "all":
+        try:
+            pass_manager, pairs_ab = ffsim.qiskit.generate_lucj_pass_manager(
+                backend=backend,
+                norb=norb,
+                connectivity=connectivity,
+                interaction_pairs=(pairs_aa, pairs_ab),
+                optimization_level=3,
+            )
+        except RuntimeError:
+            print("Unable to generate ffsim pass manager")
+            pass_manager = None
 
     print("pairs_aa:", pairs_aa)
     print("pairs_ab:", pairs_ab)
@@ -326,7 +330,7 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
 
 if __name__ == "__main__":
 
-    num_qubits = 32
+    num_qubits = 20
 
     start = int(np.sqrt(num_qubits))
     rows, cols = 0,0
