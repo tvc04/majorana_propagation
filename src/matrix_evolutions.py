@@ -156,6 +156,7 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
         coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
     if connectivity == "all":
         coupling_map = CouplingMap.from_full(rows * cols)
+        connectivity = "square"
     if connectivity == "heavy-hex":
         d = 1
         while (5 * (d**2) - (2 * d) - 1) // 2 < rows * cols: # formula relating distance and qubits from ffsim's docs
@@ -263,6 +264,7 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
         coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
     if connectivity == "all":
         coupling_map = CouplingMap.from_full(rows * cols)
+        connectivity = "square"
     if connectivity == "heavy-hex":
         d = 1
         while (5 * (d**2) - (2 * d) - 1) // 2 < rows * cols: # formula relating distance and qubits from ffsim's docs
@@ -324,7 +326,7 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
 
 if __name__ == "__main__":
 
-    num_qubits = 16
+    num_qubits = 30
 
     start = int(np.sqrt(num_qubits))
     rows, cols = 0,0
