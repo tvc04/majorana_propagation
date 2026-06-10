@@ -12,6 +12,7 @@ from qiskit.providers.fake_provider import GenericBackendV2
 from qiskit.transpiler import CouplingMap
 
 import cirq
+from cirq.contrib import qasm_import
 import quimb as qu
 import quimb.tensor as qtn
 
@@ -168,8 +169,11 @@ def sim_is(connectivity):
     print(f"Gate counts: {compiled.count_ops()}")
 
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
-
-    is_bond_mps, is_bond_data = simulate(compiled_cirq, verbose=True)
+    
+    backend = "cpu"
+    if torch.cuda.is_available() == True:
+        backend = "gpu"
+    is_bond_mps, is_bond_data = simulate(compiled_cirq, verbose=True, backend=backend)
 
     return is_bond_data, compiled.num_qubits
 
