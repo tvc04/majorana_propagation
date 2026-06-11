@@ -170,10 +170,13 @@ def sim_is(connectivity):
 
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
     
-    backend = "cpu"
+    backend_hw = "cpu"
     if torch.cuda.is_available() == True:
-        backend = "gpu"
-    is_bond_mps, is_bond_data = simulate(compiled_cirq, verbose=True, backend=backend)
+        backend_hw = "gpu"
+
+    print(f"SIMULATING Fe4S4 using {backend_hw}")
+
+    is_bond_mps, is_bond_data = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
     return is_bond_data, compiled.num_qubits
 

@@ -23,7 +23,8 @@ import quimb.tensor as qtn
 from beyond_classical.quantumlib_recirq_sim import generate_boixo_2018_beyond_classical_v2
 
 
-nlayers: int = 20
+nlayers: int = 10
+backend_hw = "gpu" if torch.cuda.is_available() else "cpu"
 
 
 def generate_linear_geometry(atom: str, natoms: int, atomic_distance: float = 1.0) -> str:
@@ -102,9 +103,9 @@ def sim_rcs(rows: int, cols: int):
         seed=1,
     )
 
-    print("\nSIMULATING RCS\n")
+    print(f"\nSIMULATING RCS on {backend_hw}\n")
 
-    mps, max_bonds = simulate(circuit, verbose=True)
+    mps, max_bonds = simulate(circuit, verbose=True, backend=backend_hw)
 
     return max_bonds
 
@@ -204,9 +205,9 @@ def sim_lucj_and_ucj(natoms: int, rows: int, cols: int):
 
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
 
-    print("\nSIMULATING LUCJ\n")
+    print(f"\nSIMULATING LUCJ on {backend_hw}\n")
 
-    mps_lucj, max_bonds_lucj = simulate(compiled_cirq, verbose=True)
+    mps_lucj, max_bonds_lucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
     nlayers_ucj = nlayers // 2
 
@@ -231,9 +232,9 @@ def sim_lucj_and_ucj(natoms: int, rows: int, cols: int):
 
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
 
-    print("\nSIMULATING UCJ\n")
+    print(f"\nSIMULATING UCJ on {backend_hw}\n")
 
-    mps_ucj, max_bonds_ucj = simulate(compiled_cirq, verbose=True)
+    mps_ucj, max_bonds_ucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
     return max_bonds_lucj, max_bonds_ucj, compiled.num_qubits
 
