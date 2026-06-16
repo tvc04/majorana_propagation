@@ -241,7 +241,7 @@ def sim_lucj_and_ucj(natoms: int, rows: int, cols: int):
 
 if __name__ == "__main__":
 
-    num_qubits = 20
+    num_qubits = 40
 
     start = int(np.sqrt(num_qubits))
     rows, cols = 0,0
