@@ -1,6 +1,7 @@
 from typing import Optional
 import torch
 import sys
+import json
 
 import ffsim
 import matplotlib.pyplot as plt; plt.rcParams.update({"font.family": "serif", "font.size": 12})
@@ -183,22 +184,25 @@ def sim_is(connectivity):
 
 if __name__ == "__main__":
 
-    is_sq, nqubits = sim_is("square")
-    is_hh, nqubits = sim_is("heavy-hex")
-    is_aa, nqubits = sim_is("all")
+    test_num = int(sys.argv[1])
 
-    plt.title(f"Fe4S4 Max Bond Dimension ({nqubits} qubits)")
+    datasets = ["Fe4S4_sq","Fe4S4_hh","Fe4S4_aa"]
 
-    plt.semilogy(is_sq, "--s", markevery=10, mec="black", alpha=0.5, label=f"Square")
-    plt.semilogy(is_hh, "--s", markevery=10, mec="black", alpha=0.5, label=f"Heavy-Hex")
-    plt.semilogy(is_aa, "--s", markevery=10, mec="black", alpha=0.5, label=f"All-to-All")
-    plt.axhline(2 ** (nqubits / 2), ls="--", color="black")
+    output_data = None
 
-    plt.legend()
-
-    plt.xlabel("Gate index")
-    plt.ylabel(r"$\chi_\text{max}$");
-
-    plt.savefig("Fe4S4.png")
+    if test_num == 1:
+        output_data, nqubits = sim_is("square")
+    elif test_num == 2:
+        output_data, nqubits = sim_is("heavy-hex")
+    elif test_num == 3:
+        output_data, nqubits = sim_is("all")
     
-    plt.clf()
+    output = {
+        "n_qubits": 72,
+        "n_layers": 1,
+        "data": output_data
+    }
+
+    with open(f"{datasets[test_num-1]}.json", "w") as f:
+        json.dump(output, f, indent=4)
+

@@ -2,7 +2,7 @@ import re
 import json
 
 input_file = "out.txt"
-output_file = "40_rcs.json"
+output_file = "40_lucj_sq.json"
 
 n_qubits = 40
 n_layers = 10
