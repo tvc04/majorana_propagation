@@ -2,6 +2,7 @@ from typing import Optional
 import torch
 import sys
 import json
+import time
 
 import ffsim
 import matplotlib.pyplot as plt; plt.rcParams.update({"font.family": "serif", "font.size": 12})
@@ -30,6 +31,7 @@ def simulate(
     cutoff: float = 0.0,
 ) -> qtn.MatrixProductState:
     max_bonds = []
+    latencies = []
     rng = np.random.RandomState(seed)
 
     qubits_to_indices = {q: i for i, q in enumerate(sorted(circuit.all_qubits()))}
@@ -45,6 +47,7 @@ def simulate(
 
     num_ops = len(list(circuit.all_operations()))
     for i, op in enumerate(circuit.all_operations()):
+        start = time.perf_counter()
         qubit_indices = [qubits_to_indices[q] for q in op.qubits]
         if cirq.has_unitary(op):
             to_apply = qu.qarray(cirq.unitary(op))
@@ -70,17 +73,19 @@ def simulate(
             cutoff=cutoff,
         )
         mps.compress()
+        end = time.perf_counter()
         if verbose:
             max_bonds.append(mps.max_bond())
-            print(f"\rOp {i + 1} / {num_ops}, max bond = {mps.max_bond()}", end="")
-            
+            print(f"Op {i + 1} / {num_ops}, max bond = {mps.max_bond()}, latency = {end-start}")
+        
+        latencies.append(end-start)
 
     if verbose:
-        return mps, max_bonds
+        return mps, max_bonds, latencies
     return mps
 
 
-def sim_is(connectivity):
+def sim_is(connectivity, cutoff):
     fcidump_filename = "fcidump_Fe4S4_MO.txt"
 
     mf_as = tools.fcidump.to_scf(fcidump_filename)
@@ -177,32 +182,40 @@ def sim_is(connectivity):
 
     print(f"SIMULATING Fe4S4 using {backend_hw}")
 
-    is_bond_mps, is_bond_data = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+    if (cutoff != 0):
+        is_bond_mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, max_bond=cutoff, backend=backend_hw)
+    else:
+        is_bond_mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
-    return is_bond_data, compiled.num_qubits
+    return is_bond_data, compiled.num_qubits, latencies
 
 
 if __name__ == "__main__":
 
     test_num = int(sys.argv[1])
+    cutoff = 0
+    if len(sys.argv) == 3:
+        cutoff = int(sys.argv[2])
 
     datasets = ["Fe4S4_sq","Fe4S4_hh","Fe4S4_aa"]
 
     output_data = None
 
     if test_num == 1:
-        output_data, nqubits = sim_is("square")
+        output_data, nqubits, latencies = sim_is("square", cutoff)
     elif test_num == 2:
-        output_data, nqubits = sim_is("heavy-hex")
+        output_data, nqubits, latencies = sim_is("heavy-hex", cutoff)
     elif test_num == 3:
-        output_data, nqubits = sim_is("all")
+        output_data, nqubits, latencies = sim_is("all", cutoff)
     
     output = {
         "n_qubits": 72,
         "n_layers": 1,
-        "data": output_data
+        "cutoff": cutoff,
+        "data": output_data,
+        "latencies": latencies
     }
 
-    with open(f"{datasets[test_num-1]}.json", "w") as f:
+    with open(f"{datasets[test_num-1]}_{cutoff}.json", "w") as f:
         json.dump(output, f, indent=4)
 
