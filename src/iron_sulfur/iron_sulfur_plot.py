@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt; plt.rcParams.update({"font.family": "serif", "f
 filenames = ["Fe4S4_sq","Fe4S4_hh","Fe4S4_aa"]
 
 cutoff = 0
-if len(sys.argv) == 3:
-    cutoff = int(sys.argv[2])
+if len(sys.argv) == 2:
+    cutoff = int(sys.argv[1])
 datasets = {}
 latency_sets = {}
 
