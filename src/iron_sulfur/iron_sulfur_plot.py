@@ -52,19 +52,18 @@ plt.clf()
 
 
 if cutoff != 0:
-    plt.title(f"Fe4S4 Operation Latency (Cutoff: {cutoff}, {nqubits} qubits)")
+    plt.title(f"Fe4S4 Operation Latency (Cutoff: {cutoff})")
 else:
     plt.title(f"Fe4S4 Operation Latency ({nqubits} qubits)")
 
-plt.semilogy(sq_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Square")
-plt.semilogy(hh_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Heavy-Hex")
-plt.semilogy(aa_lat, "--o", markevery=10, color="C2", mec="black", alpha=0.5, label="All-to-All")
-plt.axhline(2 ** (nqubits / 2), ls="--", color="black")
+plt.plot(sq_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Square")
+plt.plot(hh_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Heavy-Hex")
+plt.plot(aa_lat, "--o", markevery=10, color="C2", mec="black", alpha=0.5, label="All-to-All")
 
 plt.legend()
 
 plt.xlabel("Gate index")
-plt.ylabel("Operation Latnecy")
+plt.ylabel("Operation Latnecy (seconds)")
 
 plt.savefig(f"Fe4S4_{cutoff}_latencies.png")
     
