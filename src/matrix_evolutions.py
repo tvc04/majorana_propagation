@@ -15,6 +15,10 @@ from qiskit import qasm2
 from qiskit.providers.fake_provider import GenericBackendV2
 from qiskit.transpiler import CouplingMap
 from qiskit.quantum_info import Statevector, SparsePauliOp, DensityMatrix
+from qiskit import qpy
+from qiskit_nature.second_q.hamiltonians import ElectronicEnergy
+from qiskit_nature.second_q.operators import ElectronicIntegrals
+from qiskit_nature.second_q.mappers import JordanWignerMapper
 
 import cirq
 from cirq.contrib import qasm_import
@@ -24,8 +28,9 @@ import quimb.tensor as qtn
 from beyond_classical.quantumlib_recirq_sim import generate_boixo_2018_beyond_classical_v2
 
 
-nlayers: int = 10
+nlayers: int = 20
 backend_hw = "gpu" if torch.cuda.is_available() else "cpu"
+atom: str = "H"
 
 
 def generate_linear_geometry(atom: str, natoms: int, atomic_distance: float = 1.0) -> str:
@@ -112,22 +117,18 @@ def sim_rcs(rows: int, cols: int):
 
 
 def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
-    damping: float = 0.001325
-    cutoff: float = 1e-6
-    nthreads: int = 24
 
-    # Build N2 molecule
+    spin_sq = 0
+
     mol = pyscf.gto.Mole()
     mol.build(
-        atom=generate_linear_geometry("H", natoms),
+        atom=generate_linear_geometry(atom, natoms),
         basis="sto-6g",
     )
 
-    # Define active space
     n_frozen = 0
     active_space = range(n_frozen, mol.nao_nr())
 
-    # Get molecular integralss
     scf = pyscf.scf.RHF(mol).run()
     norb = len(active_space)
     n_electrons = int(sum(scf.mo_occ[active_space]))
@@ -139,11 +140,21 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     hcore, nuclear_repulsion_energy = cas.get_h1cas(mo)
     eri = pyscf.ao2mo.restore(1, cas.get_h2cas(mo), norb)
 
-    # Compute exact energy using FCI
-    # reference_energy = cas.run().e_tot
-
     print(f"norb = {norb}")
     print(f"nelec = {nelec}")
+
+    # Build qubit Hamiltonian from PySCF integrals via Jordan-Wigner mapping
+    h2e_phys = np.einsum("prqs->pqrs", eri)  # chemist -> physicist notation
+    elec_ints = ElectronicIntegrals.from_raw_integrals(hcore, h2e_phys)
+    elec_hamiltonian = ElectronicEnergy(elec_ints)
+    mapper = JordanWignerMapper()
+    hamiltonian = mapper.map(elec_hamiltonian.second_q_op())
+    hamiltonian = (hamiltonian + SparsePauliOp("I" * (2 * norb), coeffs=[nuclear_repulsion_energy])).simplify()
+    print(f"Hamiltonian has {len(hamiltonian)} Pauli terms before cutoff.")
+    hamiltonian = hamiltonian.chop(1e-6)
+    sorted_indices = np.argsort(-np.abs(hamiltonian.coeffs))
+    hamiltonian = hamiltonian[sorted_indices]
+    print(f"Hamiltonian has {len(hamiltonian)} Pauli terms after cutoff.")
 
     # Get CCSD t2 amplitudes for initializing the ansatz
     ccsd = pyscf.cc.CCSD(
@@ -152,18 +163,18 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     t1 = ccsd.t1
     t2 = ccsd.t2
 
-    coupling_map = None
-    if connectivity == "square":
-        coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
     if connectivity == "all":
-        coupling_map = CouplingMap.from_full(rows * cols)
-        connectivity = "square"
-    if connectivity == "heavy-hex":
-        d = 1
-        while (5 * (d**2) - (2 * d) - 1) // 2 < rows * cols: # formula relating distance and qubits from ffsim's docs
-            d += 2
-        coupling_map = CouplingMap.from_heavy_hex(d)
-    
+        coupling_map = CouplingMap.from_full(2 * norb)
+    elif connectivity == "heavy-hex":
+        distance = 3
+        while CouplingMap.from_heavy_hex(distance).size() < 2 * norb:
+            distance += 2
+        coupling_map = CouplingMap.from_heavy_hex(distance)
+    else:  # square
+        coupling_map = CouplingMap.from_grid(
+            num_rows=int(np.ceil(np.sqrt(2 * norb))),
+            num_columns=int(np.ceil(np.sqrt(2 * norb)))
+        )
     backend = GenericBackendV2(
         coupling_map.size(),
         coupling_map=coupling_map,
@@ -171,11 +182,14 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     )
 
     pairs_aa = [(p, p + 1) for p in range(norb - 1)]
-    pairs_ab = [(p, p) for p in range(norb)]  # None  # Let generate_lucj_pass_manager determine the alpha-beta interactions
+    pairs_ab = [(p, p) for p in range(0, norb, 4) if p <= 16]
 
-    # Create pass manager
-    pass_manager = None
-    if connectivity != "all":
+    # TODO: Remove the p <= 16 first, change steps of 4 to steps of 2, 1 etc
+
+    # Create pass manager (only for topology-constrained connectivity)
+    if connectivity == "all":
+        pass_manager = None
+    else:
         try:
             pass_manager, pairs_ab = ffsim.qiskit.generate_lucj_pass_manager(
                 backend=backend,
@@ -197,11 +211,6 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
         t1=t1,
         n_reps=nlayers,
         interaction_pairs=(pairs_aa, pairs_ab),
-        # Setting optimize=True enables the "compressed" factorization
-        optimize=True,
-        # Limit the number of optimization iterations to prevent the code cell from running
-        # too long. Removing this line may improve results.
-        options=dict(maxiter=1000),
     )
 
     qubits = qiskit.QuantumRegister(2 * norb, name="q")
@@ -214,32 +223,31 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
     else:
         compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
 
+    print(f"Number of qubits: {compiled.num_qubits}")
+    print(f"Gate counts: {compiled.count_ops()}")
+
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
 
-    print(f"\nSIMULATING LUCJ on {backend_hw}\n")
+    print(f"\nSIMULATING UCJ on {backend_hw}\n")
 
-    mps_lucj, max_bonds_lucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+    mps_ucj, max_bonds_ucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
-    return max_bonds_lucj, compiled.num_qubits
+    return max_bonds_ucj, compiled.num_qubits
 
 
 def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
-    damping: float = 0.001325
-    cutoff: float = 1e-6
-    nthreads: int = 24
 
-    # Build N2 molecule
+    spin_sq = 0
+
     mol = pyscf.gto.Mole()
     mol.build(
-        atom=generate_linear_geometry("H", natoms),
+        atom=generate_linear_geometry(atom, natoms),
         basis="sto-6g",
     )
 
-    # Define active space
     n_frozen = 0
     active_space = range(n_frozen, mol.nao_nr())
 
-    # Get molecular integralss
     scf = pyscf.scf.RHF(mol).run()
     norb = len(active_space)
     n_electrons = int(sum(scf.mo_occ[active_space]))
@@ -251,11 +259,21 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     hcore, nuclear_repulsion_energy = cas.get_h1cas(mo)
     eri = pyscf.ao2mo.restore(1, cas.get_h2cas(mo), norb)
 
-    # Compute exact energy using FCI
-    # reference_energy = cas.run().e_tot
-
     print(f"norb = {norb}")
     print(f"nelec = {nelec}")
+
+    # Build qubit Hamiltonian from PySCF integrals via Jordan-Wigner mapping
+    h2e_phys = np.einsum("prqs->pqrs", eri)  # chemist -> physicist notation
+    elec_ints = ElectronicIntegrals.from_raw_integrals(hcore, h2e_phys)
+    elec_hamiltonian = ElectronicEnergy(elec_ints)
+    mapper = JordanWignerMapper()
+    hamiltonian = mapper.map(elec_hamiltonian.second_q_op())
+    hamiltonian = (hamiltonian + SparsePauliOp("I" * (2 * norb), coeffs=[nuclear_repulsion_energy])).simplify()
+    print(f"Hamiltonian has {len(hamiltonian)} Pauli terms before cutoff.")
+    hamiltonian = hamiltonian.chop(1e-6)
+    sorted_indices = np.argsort(-np.abs(hamiltonian.coeffs))
+    hamiltonian = hamiltonian[sorted_indices]
+    print(f"Hamiltonian has {len(hamiltonian)} Pauli terms after cutoff.")
 
     # Get CCSD t2 amplitudes for initializing the ansatz
     ccsd = pyscf.cc.CCSD(
@@ -264,18 +282,18 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     t1 = ccsd.t1
     t2 = ccsd.t2
 
-    coupling_map = None
-    if connectivity == "square":
-        coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
     if connectivity == "all":
-        coupling_map = CouplingMap.from_full(rows * cols)
-        connectivity = "square"
-    if connectivity == "heavy-hex":
-        d = 1
-        while (5 * (d**2) - (2 * d) - 1) // 2 < rows * cols: # formula relating distance and qubits from ffsim's docs
-            d += 2
-        coupling_map = CouplingMap.from_heavy_hex(d)
-    
+        coupling_map = CouplingMap.from_full(2 * norb)
+    elif connectivity == "heavy-hex":
+        distance = 3
+        while CouplingMap.from_heavy_hex(distance).size() < 2 * norb:
+            distance += 2
+        coupling_map = CouplingMap.from_heavy_hex(distance)
+    else:  # square
+        coupling_map = CouplingMap.from_grid(
+            num_rows=int(np.ceil(np.sqrt(2 * norb))),
+            num_columns=int(np.ceil(np.sqrt(2 * norb)))
+        )
     backend = GenericBackendV2(
         coupling_map.size(),
         coupling_map=coupling_map,
@@ -283,11 +301,14 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     )
 
     pairs_aa = [(p, p + 1) for p in range(norb - 1)]
-    pairs_ab = [(p, p) for p in range(norb)]  # None  # Let generate_lucj_pass_manager determine the alpha-beta interactions
+    pairs_ab = [(p, p) for p in range(0, norb, 4) if p <= 16]
 
-    # Create pass manager
-    pass_manager = None
-    if connectivity != "all":
+    # TODO: Remove the p <= 16 first, change steps of 4 to steps of 2, 1 etc
+
+    # Create pass manager (only for topology-constrained connectivity)
+    if connectivity == "all":
+        pass_manager = None
+    else:
         try:
             pass_manager, pairs_ab = ffsim.qiskit.generate_lucj_pass_manager(
                 backend=backend,
@@ -303,18 +324,12 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     print("pairs_aa:", pairs_aa)
     print("pairs_ab:", pairs_ab)
 
-    nlayers_ucj = nlayers // 2
-
+    # Create the LUCJ ansatz operator
     ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
         t2=t2,
         t1=t1,
-        n_reps=nlayers_ucj,
+        n_reps=nlayers,
         interaction_pairs=None,
-        # Setting optimize=True enables the "compressed" factorization
-        optimize=True,
-        # Limit the number of optimization iterations to prevent the code cell from running
-        # too long. Removing this line may improve results.
-        options=dict(maxiter=1000),
     )
 
     qubits = qiskit.QuantumRegister(2 * norb, name="q")
@@ -322,7 +337,13 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
     circuit.append(ffsim.qiskit.PrepareHartreeFockJW(norb, nelec), qubits)
     circuit.append(ffsim.qiskit.UCJOpSpinBalancedJW(ucj_op), qubits)
 
-    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
+    if pass_manager is not None:
+        compiled = pass_manager.run(circuit)
+    else:
+        compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
+
+    print(f"Number of qubits: {compiled.num_qubits}")
+    print(f"Gate counts: {compiled.count_ops()}")
 
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
 
@@ -335,7 +356,7 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
 
 if __name__ == "__main__":
 
-    num_qubits = 40
+    num_qubits = 20
 
     start = int(np.sqrt(num_qubits))
     rows, cols = 0,0
@@ -382,7 +403,6 @@ if __name__ == "__main__":
 
     elif (test_num == 7):
         output_data = sim_rcs(rows, cols)
-
 
     output = {
         "n_qubits": nqubits,
