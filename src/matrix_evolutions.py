@@ -102,6 +102,7 @@ def simulate(
     return mps
 
 
+
 def sim_rcs(rows: int, cols: int):
     circuit = generate_boixo_2018_beyond_classical_v2(
         cirq.GridQubit.rect(rows, cols),
@@ -113,7 +114,7 @@ def sim_rcs(rows: int, cols: int):
 
     mps, max_bonds = simulate(circuit, verbose=True, backend=backend_hw)
 
-    return max_bonds
+    return mps, max_bonds
 
 
 def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
@@ -230,9 +231,9 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
 
     print(f"\nSIMULATING UCJ on {backend_hw}\n")
 
-    mps_ucj, max_bonds_ucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+    mps, max_bonds_lucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
-    return max_bonds_ucj, compiled.num_qubits
+    return mps, max_bonds_lucj, compiled.num_qubits
 
 
 def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
@@ -349,9 +350,9 @@ def sim_ucj(natoms: int, rows: int, cols: int, connectivity: str):
 
     print(f"\nSIMULATING UCJ on {backend_hw}\n")
 
-    mps_ucj, max_bonds_ucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+    mps, max_bonds_ucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
-    return max_bonds_ucj, compiled.num_qubits
+    return mps, max_bonds_ucj, compiled.num_qubits
 
 
 if __name__ == "__main__":
@@ -375,34 +376,35 @@ if __name__ == "__main__":
     datasets = ["lucj_sq","ucj_sq","lucj_hh","ucj_hh","lucj_aa","ucj_aa","rcs"]
 
     output_data = None
+    mps = None
     nqubits = 0
 
     if (test_num == 1):
-        lucj_sq, nqubits = sim_lucj(atoms, rows, cols, "square")
+        mps, lucj_sq, nqubits = sim_lucj(atoms, rows, cols, "square")
         output_data = lucj_sq
     
     elif (test_num == 2):
-        ucj_sq, nqubits = sim_ucj(atoms, rows, cols, "square")
+        mps, ucj_sq, nqubits = sim_ucj(atoms, rows, cols, "square")
         output_data = ucj_sq
     
     elif (test_num == 3):
-        lucj_hh, nqubits = sim_lucj(atoms, rows, cols, "heavy-hex")
+        mps, lucj_hh, nqubits = sim_lucj(atoms, rows, cols, "heavy-hex")
         output_data = lucj_hh
     
     elif (test_num == 4):
-        ucj_hh, nqubits = sim_ucj(atoms, rows, cols, "heavy-hex")
+        mps, ucj_hh, nqubits = sim_ucj(atoms, rows, cols, "heavy-hex")
         output_data = ucj_hh
     
     elif (test_num == 5):
-        lucj_aa, nqubits = sim_lucj(atoms, rows, cols, "all")
+        mps, lucj_aa, nqubits = sim_lucj(atoms, rows, cols, "all")
         output_data = lucj_aa
     
     elif (test_num == 6):
-        ucj_aa, nqubits = sim_ucj(atoms, rows, cols, "all")
+        mps, ucj_aa, nqubits = sim_ucj(atoms, rows, cols, "all")
         output_data = ucj_aa
 
     elif (test_num == 7):
-        output_data = sim_rcs(rows, cols)
+        mps, output_data = sim_rcs(rows, cols)
 
     output = {
         "n_qubits": nqubits,
@@ -412,3 +414,5 @@ if __name__ == "__main__":
 
     with open(f"matrix_data/{datasets[test_num-1]}.json", "w") as f:
         json.dump(output, f, indent=4)
+
+    mps.to_hdf5(f"matrix_data/product_states/{datasets[test_num-1]}.hdf5")

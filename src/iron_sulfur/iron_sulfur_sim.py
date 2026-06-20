@@ -177,11 +177,11 @@ def sim_is(connectivity, cutoff):
     print(f"SIMULATING Fe4S4 using {backend_hw}")
 
     if (cutoff != 0):
-        is_bond_mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, max_bond=cutoff, backend=backend_hw)
+        mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, max_bond=cutoff, backend=backend_hw)
     else:
-        is_bond_mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+        mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
-    return is_bond_data, compiled.num_qubits, latencies
+    return mps, is_bond_data, compiled.num_qubits, latencies
 
 
 if __name__ == "__main__":
@@ -194,13 +194,14 @@ if __name__ == "__main__":
     datasets = ["Fe4S4_sq","Fe4S4_hh","Fe4S4_aa"]
 
     output_data = None
+    mps = None
 
     if test_num == 1:
-        output_data, nqubits, latencies = sim_is("square", cutoff)
+        mps, output_data, nqubits, latencies = sim_is("square", cutoff)
     elif test_num == 2:
-        output_data, nqubits, latencies = sim_is("heavy-hex", cutoff)
+        mps, output_data, nqubits, latencies = sim_is("heavy-hex", cutoff)
     elif test_num == 3:
-        output_data, nqubits, latencies = sim_is("all", cutoff)
+        mps, output_data, nqubits, latencies = sim_is("all", cutoff)
     
     output = {
         "n_qubits": nqubits,
@@ -212,3 +213,8 @@ if __name__ == "__main__":
 
     with open(f"{datasets[test_num-1]}_{cutoff}.json", "w") as f:
         json.dump(output, f, indent=4)
+
+    import pickle
+
+    with open(f"product_states/{datasets[test_num-1]}_{cutoff}.pkl", "wb") as f:
+        pickle.dump(mps, f)
