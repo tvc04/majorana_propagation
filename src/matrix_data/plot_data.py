@@ -32,7 +32,7 @@ rcs = datasets["rcs"]
 with open("lucj_sq.json", "r") as f:
     metadata = json.load(f)
 
-nqubits = metadata["n_qubits"]
+nqubits = 20
 nlayers = metadata["n_layers"]
 
 

@@ -229,7 +229,7 @@ def sim_lucj(natoms: int, rows: int, cols: int, connectivity: str):
 
     compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
 
-    print(f"\nSIMULATING UCJ on {backend_hw}\n")
+    print(f"\nSIMULATING LUCJ on {backend_hw}\n")
 
     mps, max_bonds_lucj = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
@@ -415,4 +415,7 @@ if __name__ == "__main__":
     with open(f"matrix_data/{datasets[test_num-1]}.json", "w") as f:
         json.dump(output, f, indent=4)
 
-    mps.to_hdf5(f"matrix_data/product_states/{datasets[test_num-1]}.hdf5")
+    import pickle
+
+    with open(f"matrix_data/product_states/{datasets[test_num-1]}.pkl", "wb") as f:
+        pickle.dump(mps, f)
