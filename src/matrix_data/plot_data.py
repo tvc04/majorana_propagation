@@ -38,7 +38,7 @@ nlayers = metadata["n_layers"]
 
 plt.figure(figsize=(9,5))
 
-plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers}/{nlayers//2} layers)")
+plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers} layers)")
 
 plt.semilogy(lucj_sq, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"LUCJ Square")
 plt.semilogy(ucj_sq, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"UCJ Square")
@@ -56,7 +56,7 @@ plt.savefig("matrix_square.png")
 plt.clf()
 
 
-plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers}/{nlayers//2} layers)")
+plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers} layers)")
 
 plt.semilogy(lucj_hh, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"LUCJ Heavy Hex")
 plt.semilogy(ucj_hh, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"UCJ Heavy Hex")
@@ -70,11 +70,11 @@ plt.xlabel("Gate index")
 plt.ylabel(r"$\chi_\text{max}$");
 
 plt.savefig("matrix_hex.png")
-        
+
 plt.clf()
 
 
-plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers}/{nlayers//2} layers)")
+plt.title(f"LUCJ/UCJ Max Bond Dimension ({nqubits} qubits, {nlayers} layers)")
 
 plt.semilogy(lucj_aa, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"LUCJ All to All")
 plt.semilogy(ucj_aa, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"UCJ All to All")
