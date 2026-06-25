@@ -3,8 +3,14 @@ from typing import List
 import qiskit
 import cirq
 import pickle
+import sys
 
 from qiskit.quantum_info import SparsePauliOp
+from qiskit import qpy
+from qiskit import qasm2
+
+import cirq
+from cirq.contrib import qasm_import
 
 import openfermion as of
 from openfermion import QubitOperator
@@ -96,7 +102,12 @@ def get_qubit_operator(connectivity):
 
     qubit_operator = QubitOperator()
 
+    numterms = min(len(paulis), len(coeffs))
+    i = 0
+
     for label, coeff in zip(paulis, coeffs):
+        #print(f"Status: On term {i} / {numterms}", end="\r")
+        #i += 1
 
         # Remove small terms if requested
         if chop_threshold is not None and abs(coeff) < chop_threshold:
@@ -130,17 +141,17 @@ def get_qubit_operator(connectivity):
 def get_cirq_qubits_from_qpy(connectivity):
     # Load Qiskit circuit
     with open(f"hamiltonians/{connectivity}_circuit.qpy", "rb") as f:
-        circuits = qiskit.qpy.load(f)
+        circuits = qpy.load(f)
 
     qiskit_circuit = circuits[0]
 
     # Convert to Cirq
-    cirq_circuit = cirq.contrib.qasm_import.circuit_from_qasm(qiskit_circuit.qasm()) # qasm2.dumps(qiskit_circuit)
+    cirq_circuit = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(qiskit_circuit))
 
     # Get qubit list
     qs = sorted(
         cirq_circuit.all_qubits(),
-        key=lambda q: q.x
+        key=lambda q: q.name
     )
 
     return cirq_circuit, qs
@@ -161,17 +172,25 @@ def load_mps(connectivity, cutoff):
     return mps
 
 
+test_num = int(sys.argv[1]) # 1 = square, 2 = heavy hex, 3 = all to all
+connectivity = ALL_CONNECTIVITIES[test_num-1]
 
-for connectivity in ALL_CONNECTIVITIES:
-    qo = get_qubit_operator(connectivity)
-    qc, qs = get_cirq_qubits_from_qpy(connectivity)
-    ps = of.transforms.qubit_operator_to_pauli_sum(qo)
-    mpo = pauli_string_to_mpo(ps, qs)
+print(f"\nStarting {connectivity} estimations")
+print("\nCreating qubit operator...")
+qo = get_qubit_operator(connectivity)
+print("\nLoading cirq file...")
+qc, qs = get_cirq_qubits_from_qpy(connectivity)
+print("\nCreating pauli sum...")
+ps = of.transforms.qubit_operator_to_pauli_sum(qo) # also pass in qs?
 
-    for cutoff in ALL_CUTOFFS:
-        mps = load_mps(connectivity, cutoff)
-        expectation = mpo_mps_exepctation(mpo, mps)
+for cutoff in ALL_CUTOFFS:
+    print(f"\nCreating {connectivity} mpo...")
+    mpo = pauli_sum_to_mpo(ps, qs, cutoff)
+    print(f"\nLoading {connectivity} {cutoff} cutoff mps...")
+    mps = load_mps(connectivity, cutoff)
+    print(f"\nCalculating expectation...")
+    expectation = mpo_mps_exepctation(mpo, mps)
 
-        print(f"\nFe4S4 EXPACTATION ({connectivity}, cutoff {cutoff}):")
-        print(expectation)
-        print()
+    print(f"\nFe4S4 EXPACTATION ({connectivity}, cutoff {cutoff}):")
+    print(expectation)
+    print()
