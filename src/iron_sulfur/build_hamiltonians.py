@@ -106,19 +106,10 @@ def make_compiled_ham(connectivity):
         list(zip(cache["paulis"].astype(str), cache["coeffs"]))
     )
 
-    np.savez(
-        f"hamiltonians/{connectivity}_hamiltonian.npz",
-        paulis=np.array(hamiltonian.paulis.to_labels()),
-        coeffs=np.array(hamiltonian.coeffs),
-        ccsd_energy=np.float64(ccsd_energy),
-        n_qubits=np.int64(compiled.num_qubits),
-    )
-    print(f"{connectivity}_hamiltonian.npz")
-
     hamiltonian_physical = hamiltonian.apply_layout(compiled.layout)
 
     np.savez(
-        f"hamiltonians/{connectivity}_compiled_hamiltonian.npz",
+        f"hamiltonians/{connectivity}_hamiltonian.npz",
         paulis=np.array(hamiltonian_physical.paulis.to_labels()),
         coeffs=np.array(hamiltonian_physical.coeffs),
         ccsd_energy=np.float64(ccsd_energy),
@@ -153,7 +144,7 @@ if remake_cache:
     print(f"Hamiltonian has {len(hamiltonian)} Pauli terms before cutoff.")
 
     hamiltonian = hamiltonian.simplify()
-    hamiltonian = hamiltonian.chop(1e-6)
+    hamiltonian = hamiltonian.chop(1e-10)
     sorted_indices = np.argsort(-np.abs(hamiltonian.coeffs))
     hamiltonian = hamiltonian[sorted_indices]
 

@@ -5,6 +5,8 @@ import cirq
 import pickle
 import sys
 
+import pandas as pd
+
 from qiskit.quantum_info import SparsePauliOp
 from qiskit import qpy
 from qiskit import qasm2
@@ -24,7 +26,7 @@ from quimb.tensor.tensor_1d_compress import tensor_network_1d_compress_direct
 ALL_CONNECTIVITIES = ["square", "heavy-hex", "all"]
 ALL_MAX_BONDS = [32, 64, 128, 256]
 fcidump_filename = "fcidump_Fe4S4_MO.txt"
-chop_threshold = 1e-6
+chop_threshold = 1e-10
 
 
 
@@ -94,7 +96,7 @@ def compress_ham(hamiltonian):
     print("Max Pauli weight:", max(weights))
     print("Weight 1 terms:", weights.count(1))
     print("Weight 2 terms:", weights.count(2))
-    print("Weight >2 terms:", sum(w > 5 for w in weights))
+    print("Weight >5 terms:", sum(w > 5 for w in weights))
 
     keep = [
         w <= 2
@@ -112,7 +114,6 @@ def compress_ham(hamiltonian):
 
 
 def get_qubit_operator(connectivity):
-    #cache = np.load(f"hamiltonians/{connectivity}_compiled_hamiltonian.npz")
     cache = np.load(f"hamiltonians/{connectivity}_hamiltonian.npz")
 
     paulis = cache["paulis"].astype(str)
@@ -188,9 +189,6 @@ connectivity = ALL_CONNECTIVITIES[test_num-1]
 print(f"\nStarting {connectivity} estimations")
 print("\nCreating qubit operator...")
 qo = get_qubit_operator(connectivity)
-
-print(list(qo.terms.keys())[:5])
-
 print("\nCreating pauli sum...")
 ps = of.transforms.qubit_operator_to_pauli_sum(qo) # also pass in qs?
 #print("\nLoading cirq file...")
