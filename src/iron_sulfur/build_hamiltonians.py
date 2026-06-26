@@ -105,6 +105,16 @@ def make_compiled_ham(connectivity):
     hamiltonian = SparsePauliOp.from_list(
         list(zip(cache["paulis"].astype(str), cache["coeffs"]))
     )
+
+    np.savez(
+        f"hamiltonians/{connectivity}_hamiltonian.npz",
+        paulis=np.array(hamiltonian.paulis.to_labels()),
+        coeffs=np.array(hamiltonian.coeffs),
+        ccsd_energy=np.float64(ccsd_energy),
+        n_qubits=np.int64(compiled.num_qubits),
+    )
+    print(f"{connectivity}_hamiltonian.npz")
+
     hamiltonian_physical = hamiltonian.apply_layout(compiled.layout)
 
     np.savez(
@@ -117,37 +127,39 @@ def make_compiled_ham(connectivity):
     print(f"{connectivity}_compiled_hamiltonian.npz")
 
 
-hamiltonian_cache = "hamiltonians/hamiltonian_cache.npz"
+remake_cache = False
+if remake_cache:
+    hamiltonian_cache = "hamiltonians/hamiltonian_cache.npz"
 
-mf_as = tools.fcidump.to_scf(fcidump_filename)
-h1e = mf_as.get_hcore()
+    mf_as = tools.fcidump.to_scf(fcidump_filename)
+    h1e = mf_as.get_hcore()
 
-num_orb = h1e.shape[0]
-n_qubits = 2 * num_orb
-print(f"Number of spatial orbitals: {num_orb}, Number of qubits: {n_qubits}")
+    num_orb = h1e.shape[0]
+    n_qubits = 2 * num_orb
+    print(f"Number of spatial orbitals: {num_orb}, Number of qubits: {n_qubits}")
 
-h2e = ao2mo.restore(1, mf_as._eri, num_orb)
-h2e_phys = np.einsum("prqs->pqrs", h2e)
+    h2e = ao2mo.restore(1, mf_as._eri, num_orb)
+    h2e_phys = np.einsum("prqs->pqrs", h2e)
 
-constant = tools.fcidump.read(fcidump_filename).get("ECORE", 0.0)
-print("Constant term (ECORE):", constant)
+    constant = tools.fcidump.read(fcidump_filename).get("ECORE", 0.0)
+    print("Constant term (ECORE):", constant)
 
-elec_ints = ElectronicIntegrals.from_raw_integrals(h1e, h2e_phys)
-elec_hamiltonian = ElectronicEnergy(elec_ints)
+    elec_ints = ElectronicIntegrals.from_raw_integrals(h1e, h2e_phys)
+    elec_hamiltonian = ElectronicEnergy(elec_ints)
 
-mapper = JordanWignerMapper()
-hamiltonian = mapper.map(elec_hamiltonian.second_q_op())
-hamiltonian = (hamiltonian + SparsePauliOp("I" * n_qubits, coeffs=[constant])).simplify()
-print(f"Hamiltonian has {len(hamiltonian)} Pauli terms before cutoff.")
+    mapper = JordanWignerMapper()
+    hamiltonian = mapper.map(elec_hamiltonian.second_q_op())
+    hamiltonian = (hamiltonian + SparsePauliOp("I" * n_qubits, coeffs=[constant])).simplify()
+    print(f"Hamiltonian has {len(hamiltonian)} Pauli terms before cutoff.")
 
-hamiltonian = hamiltonian.simplify()
-hamiltonian = hamiltonian.chop(1e-6)
-sorted_indices = np.argsort(-np.abs(hamiltonian.coeffs))
-hamiltonian = hamiltonian[sorted_indices]
+    hamiltonian = hamiltonian.simplify()
+    hamiltonian = hamiltonian.chop(1e-6)
+    sorted_indices = np.argsort(-np.abs(hamiltonian.coeffs))
+    hamiltonian = hamiltonian[sorted_indices]
 
-np.savez(hamiltonian_cache, paulis=hamiltonian.paulis.to_labels(), coeffs=hamiltonian.coeffs)
-print("Number of terms after cutoff:", len(hamiltonian.coeffs))
-print(f"Hamiltonian cached to {hamiltonian_cache}")
+    np.savez(hamiltonian_cache, paulis=hamiltonian.paulis.to_labels(), coeffs=hamiltonian.coeffs)
+    print("Number of terms after cutoff:", len(hamiltonian.coeffs))
+    print(f"Hamiltonian cached to {hamiltonian_cache}")
 
 for connectivity in ALL_CONNECTIVITIES:
     make_compiled_ham(connectivity)

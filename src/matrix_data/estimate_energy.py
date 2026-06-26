@@ -17,13 +17,21 @@ from openfermion import QubitOperator
 
 from pyscf import ao2mo, tools, cc
 
+import pyscf
+import pyscf.cc
+import pyscf.mcscf
+
+from qiskit.quantum_info import Statevector, SparsePauliOp, DensityMatrix
+from qiskit_nature.second_q.hamiltonians import ElectronicEnergy
+from qiskit_nature.second_q.operators import ElectronicIntegrals
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+
 import quimb
 from quimb.tensor.tensor_1d import MatrixProductOperator, MatrixProductState
 from quimb.tensor.tensor_1d_compress import tensor_network_1d_compress_direct
 
 ALL_CONNECTIVITIES = ["square", "heavy-hex", "all"]
-ALL_MAX_BONDS = [32, 64, 128, 256]
-fcidump_filename = "fcidump_Fe4S4_MO.txt"
+ALL_LOCALITIES = ["lucj", "ucj"]
 chop_threshold = 1e-6
 
 
@@ -56,7 +64,7 @@ def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> Matrix
 
 
 
-def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int, verbose: bool = False) -> MatrixProductOperator:
+def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int = None, verbose: bool = False) -> MatrixProductOperator:
     """Convert a Pauli sum to an MPO."""
     nterms = len(psum)
     for i, p in enumerate(psum):
@@ -66,7 +74,7 @@ def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int, ver
             mpo = pauli_string_to_mpo(p, qs)
         else:
             mpo += pauli_string_to_mpo(p, qs)
-            tensor_network_1d_compress_direct(mpo, max_bond=max_bond, inplace=True)
+            tensor_network_1d_compress_direct(mpo, max_bond=None, inplace=True)
     return mpo
 
 
@@ -94,7 +102,7 @@ def compress_ham(hamiltonian):
     print("Max Pauli weight:", max(weights))
     print("Weight 1 terms:", weights.count(1))
     print("Weight 2 terms:", weights.count(2))
-    print("Weight >2 terms:", sum(w > 5 for w in weights))
+    print("Weight >5 terms:", sum(w > 5 for w in weights))
 
     keep = [
         w <= 2
@@ -111,9 +119,9 @@ def compress_ham(hamiltonian):
 
 
 
-def get_qubit_operator(connectivity):
+def get_qubit_operator(connectivity, local):
     #cache = np.load(f"hamiltonians/{connectivity}_compiled_hamiltonian.npz")
-    cache = np.load(f"hamiltonians/{connectivity}_hamiltonian.npz")
+    cache = np.load(f"hamiltonians/{connectivity}_{local.capitalize()}.npz")
 
     paulis = cache["paulis"].astype(str)
     coeffs = cache["coeffs"].real
@@ -151,9 +159,9 @@ def get_qubit_operator(connectivity):
 
 
 
-def get_cirq_qubits_from_qpy(connectivity):
+def get_cirq_qubits_from_qpy(connectivity, local):
     # Load Qiskit circuit
-    with open(f"hamiltonians/{connectivity}_circuit.qpy", "rb") as f:
+    with open(f"hamiltonians/{connectivity}_{local.capitalize()}_circuit.qpy", "rb") as f:
         circuits = qpy.load(f)
 
     qiskit_circuit = circuits[0]
@@ -168,14 +176,14 @@ def get_cirq_qubits_from_qpy(connectivity):
 
 
 
-def load_mps(connectivity, cutoff):
+def load_mps(connectivity, local):
     prefix = "sq"
     if connectivity == "heavy-hex":
         prefix = "hh"
     if connectivity == "all":
         prefix = "aa"
     
-    filename = f"product_states/Fe4S4_{prefix}_{cutoff}.pkl"
+    filename = f"product_states/{local}_{prefix}.pkl"
     with open(filename, "rb") as f:
         mps = pickle.load(f)
 
@@ -186,35 +194,56 @@ test_num = int(sys.argv[1]) # 1 = square, 2 = heavy hex, 3 = all to all
 connectivity = ALL_CONNECTIVITIES[test_num-1]
 
 print(f"\nStarting {connectivity} estimations")
-print("\nCreating qubit operator...")
-qo = get_qubit_operator(connectivity)
 
-print(list(qo.terms.keys())[:5])
 
-print("\nCreating pauli sum...")
-ps = of.transforms.qubit_operator_to_pauli_sum(qo) # also pass in qs?
-#print("\nLoading cirq file...")
-#qc, qs = get_cirq_qubits_from_qpy(connectivity)
-print("\nGetting qubits...")
-qs = list(sorted(set(ps.qubits), key=lambda q: str(q)))
+for local in ALL_LOCALITIES:
+    print("\nCreating qubit operator...")
+    qo = get_qubit_operator(connectivity, local)
+    print("\nCreating pauli sum...")
+    ps = of.transforms.qubit_operator_to_pauli_sum(qo) # also pass in qs?
+    #print("\nLoading cirq file...")
+    #qc, qs = get_cirq_qubits_from_qpy(connectivity)
+    print("\nGetting qubits...")
+    qs = list(sorted(set(ps.qubits), key=lambda q: str(q)))
 
-for cutoff in ALL_MAX_BONDS:
-    print(f"\nCreating {connectivity} {cutoff} cutoff mpo...")
-    mpo = pauli_sum_to_mpo(ps, qs, cutoff)
-    print(f"\nLoading {connectivity} {cutoff} cutoff mps...")
-    mps = load_mps(connectivity, cutoff)
+    print(f"\nCreating {connectivity} {local} mpo...")
+    mpo = pauli_sum_to_mpo(ps, qs)
+    print(f"\nLoading {connectivity} {local} mps...")
+    mps = load_mps(connectivity, local)
     print(f"\nCalculating expectation...")
     expectation = mpo_mps_exepctation(mpo, mps)
 
-    print(f"\nFe4S4 EXPECTATION ({connectivity}, cutoff {cutoff}):")
+    print(f"\n20 qubit H-Chain EXPECTATION ({connectivity}, {local}):")
     print(expectation)
     print()
 
-fcidump_filename = "fcidump_Fe4S4_MO.txt"
 
-mf_as = tools.fcidump.to_scf(fcidump_filename)
-mf_as.kernel()
+atom: str = "H"
+natoms = 10
 
-ccsd = cc.CCSD(mf_as).run()
+mol = pyscf.gto.Mole()
+mol.build(
+    atom="; ".join([f"{atom} 0 0 {i * 1.0}" for i in range(natoms)]),
+    basis="sto-6g",
+)
+
+n_frozen = 0
+active_space = range(n_frozen, mol.nao_nr())
+
+scf = pyscf.scf.RHF(mol).run()
+norb = len(active_space)
+n_electrons = int(sum(scf.mo_occ[active_space]))
+n_alpha = (n_electrons + mol.spin) // 2
+n_beta = (n_electrons - mol.spin) // 2
+nelec = (n_alpha, n_beta)
+cas = pyscf.mcscf.CASCI(scf, norb, nelec)
+mo = cas.sort_mo(active_space, base=0)
+hcore, nuclear_repulsion_energy = cas.get_h1cas(mo)
+eri = pyscf.ao2mo.restore(1, cas.get_h2cas(mo), norb)
+
+ccsd = pyscf.cc.CCSD(
+    scf, frozen=[i for i in range(mol.nao_nr()) if i not in active_space]
+).run()
+
 ccsd_energy = ccsd.e_tot
 print(f"ACTUAL CCSD energy: {ccsd_energy:.10e}")
