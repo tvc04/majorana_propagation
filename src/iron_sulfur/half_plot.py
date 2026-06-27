@@ -59,19 +59,28 @@ plt.savefig(f"Fe4S4_{cutoff}.png")
 plt.clf()
 
 
+sq_time = sum(sq_lat)
+hh_time = sum(hh_lat)
+aa_time = sum(aa_lat)
+
+def format_time(seconds):
+    mins = seconds // 60
+    hours, minutes = divmod(mins, 60)
+    return f"{int(hours)}:{minutes:.0f}"
+
 if cutoff != 0:
-    plt.title(f"Fe4S4 Operation Latency (Cutoff: {cutoff})")
+    plt.title(f"Fe4S4 Gate Application Time (Cutoff: {cutoff})")
 else:
-    plt.title(f"Fe4S4 Operation Latency")
+    plt.title(f"Fe4S4 Gate Application Time")
 
-plt.semilogy(sq_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Square")
-plt.semilogy(hh_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Heavy-Hex")
-plt.semilogy(aa_lat, "--o", markevery=10, color="C2", mec="black", alpha=0.5, label="All-to-All")
+plt.semilogy(sq_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Square ({format_time(sq_time)})")
+plt.semilogy(hh_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Heavy-Hex ({format_time(hh_time)})")
+plt.semilogy(aa_lat, "--o", markevery=10, color="C2", mec="black", alpha=0.5, label=f"All-to-All ({format_time(aa_time)})")
 
-plt.legend()
+plt.legend(title="Runtime (hr:min)")
 
 plt.xlabel("Gate index")
-plt.ylabel("Operation Latnecy (seconds)")
+plt.ylabel("Application Time (seconds)")
 
 plt.savefig(f"Fe4S4_{cutoff}_latencies.png")
     

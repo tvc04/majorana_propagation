@@ -51,20 +51,28 @@ plt.savefig(f"Fe4S4_{cutoff}.png")
 plt.clf()
 
 
+def format_time(seconds):
+    minutes, seconds = divmod(seconds, 60)
+    return f"{int(minutes)}:{seconds:.0f}"
+
+sq_time = sum(sq_lat)
+hh_time = sum(hh_lat)
+aa_time = sum(aa_lat)
+
 if cutoff != 0:
-    plt.title(f"Fe4S4 Operation Latency (Cutoff: {cutoff})")
+    plt.title(f"Fe4S4 Gate Application Time (Cutoff: {cutoff})")
 else:
-    plt.title(f"Fe4S4 Operation Latency ({nqubits} qubits)")
+    plt.title(f"Fe4S4 Gate Application Time ({nqubits} qubits)")
 
-plt.plot(sq_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Square")
-plt.plot(hh_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Heavy-Hex")
-plt.plot(aa_lat, "--o", markevery=10, color="C2", mec="black", alpha=0.5, label="All-to-All")
+plt.plot(sq_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Square ({format_time(sq_time)})")
+plt.plot(hh_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Heavy-Hex ({format_time(hh_time)})")
+plt.plot(aa_lat, "--o", markevery=10, color="C2", mec="black", alpha=0.5, label=f"All-to-All ({format_time(aa_time)})")
 
-plt.legend()
+plt.legend(title="Runtime (min:sec)")
 
 plt.xlabel("Gate index")
-plt.ylabel("Operation Latnecy (seconds)")
+plt.ylabel("Application Time (seconds)")
 
 plt.savefig(f"Fe4S4_{cutoff}_latencies.png")
-    
+
 plt.clf()

@@ -502,3 +502,11 @@ Op 501 / 4085, max bond = 8168, latency = 1360.9640348749235
 Op 502 / 4085, max bond = 8164, latency = 1357.991727729328
 Op 503 / 4085, max bond = 8160, latency = 1352.6006122492254
 Op 504 / 4085, max bond = 8156, latency = 1375.661651974544
+Op 505 / 4085, max bond = 8191, latency = 2936.9249530313537
+Op 506 / 4085, max bond = 8191, latency = 4602.018898504786
+Op 507 / 4085, max bond = 8191, latency = 4056.3348828386515
+Op 508 / 4085, max bond = 8191, latency = 4119.03331261687
+Op 509 / 4085, max bond = 8191, latency = 3832.558616361581
+Op 510 / 4085, max bond = 8191, latency = 3841.9137567179278
+Op 511 / 4085, max bond = 8191, latency = 3970.1833910532296
+Op 512 / 4085, max bond = 8191, latency = 3907.472193083726
