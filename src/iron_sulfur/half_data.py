@@ -2,7 +2,7 @@ import re
 import json
 
 input_file = "out.txt"
-output_file = "Fe4S4_aa_0.json"
+output_file = "Fe4S4_data/Fe4S4_aa_0.json"
 
 n_qubits = 72
 n_layers = 1

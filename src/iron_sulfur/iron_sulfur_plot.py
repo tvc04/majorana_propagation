@@ -11,7 +11,7 @@ datasets = {}
 latency_sets = {}
 
 for filename in filenames:
-    with open(f"{filename}_{cutoff}.json", "r") as f:
+    with open(f"Fe4S4_data/{filename}_{cutoff}.json", "r") as f:
         contents = json.load(f)
 
     datasets[filename] = contents["data"]
@@ -46,7 +46,7 @@ plt.legend()
 plt.xlabel("Gate index")
 plt.ylabel(r"$\chi_\text{max}$");
 
-plt.savefig(f"Fe4S4_{cutoff}.png")
+plt.savefig(f"Fe4S4_plots/Fe4S4_{cutoff}.png")
     
 plt.clf()
 
@@ -73,6 +73,6 @@ plt.legend(title="Runtime (min:sec)")
 plt.xlabel("Gate index")
 plt.ylabel("Application Time (seconds)")
 
-plt.savefig(f"Fe4S4_{cutoff}_latencies.png")
+plt.savefig(f"Fe4S4_plots/Fe4S4_{cutoff}_latencies.png")
 
 plt.clf()

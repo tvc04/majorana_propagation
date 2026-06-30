@@ -6,10 +6,13 @@ from qiskit.providers.fake_provider import GenericBackendV2
 from qiskit.transpiler import CouplingMap
 from qiskit.quantum_info import SparsePauliOp
 from qiskit import qpy
+from qiskit import qasm2
 
 from qiskit_nature.second_q.hamiltonians import ElectronicEnergy
 from qiskit_nature.second_q.operators import ElectronicIntegrals
 from qiskit_nature.second_q.mappers import JordanWignerMapper
+
+import cirq
 
 
 ALL_CONNECTIVITIES = ["square", "heavy-hex", "all"]
@@ -51,47 +54,14 @@ def make_compiled_ham(connectivity):
     circuit.append(ffsim.qiskit.PrepareHartreeFockJW(num_orb, nelec), qubits)
     circuit.append(ffsim.qiskit.UCJOpSpinBalancedJW(ucj_op), qubits)
 
-    # CUSTOM CONNECTIVITY LOGIC
-
-    nq = 2*num_orb
-    start = int(np.sqrt(nq))
-    rows, cols = 0,0
-
-    for i in range(start, 0, -1):
-        if nq % i == 0:
-            rows, cols = i, nq // i
-            break
-        
-    print(f"Rows: {rows}, Cols: {cols}")
-
-    coupling_map = None
-    if connectivity == "square":
-        coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
-    if connectivity == "all":
-        coupling_map = CouplingMap.from_full(rows * cols)
-    if connectivity == "heavy-hex":
-        coupling_map = CouplingMap.from_heavy_hex(distance=7)
-
+    coupling_map = CouplingMap.from_full(num_qubits=circuit.num_qubits)
     backend = GenericBackendV2(
         coupling_map.size(),
         coupling_map=coupling_map,
         basis_gates=["cp", "xx_plus_yy", "p", "x", "swap"],
     )
 
-    pass_manager = None
-    if connectivity != "all":
-        pass_manager, _ = ffsim.qiskit.generate_lucj_pass_manager(
-            backend=backend,
-            norb=num_orb,
-            connectivity=connectivity,
-            interaction_pairs=(alpha_alpha_indices, alpha_beta_indices),
-            optimization_level=3,
-        )
-    
-    if pass_manager is not None:
-        compiled = pass_manager.run(circuit)
-    else:
-        compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
+    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=0)
 
     print(f"Number of qubits: {compiled.num_qubits}")
     print(f"Gate counts: {compiled.count_ops()}")

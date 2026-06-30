@@ -85,7 +85,7 @@ def simulate(
     return mps
 
 
-def sim_is(connectivity, cutoff):
+def sim_is(local, cutoff):
     fcidump_filename = "fcidump_Fe4S4_MO.txt"
 
     mf_as = tools.fcidump.to_scf(fcidump_filename)
@@ -102,9 +102,13 @@ def sim_is(connectivity, cutoff):
     ccsd = cc.CCSD(mf_as).run()
     ccsd_energy = ccsd.e_tot
     print(f"CCSD energy: {ccsd_energy:.10e}")
-
-    alpha_alpha_indices = [(p, p + 1) for p in range(num_orb - 1)]
-    alpha_beta_indices  = [(p, p) for p in range(0, num_orb, 4) if p <= 16]
+    
+    if local:
+        alpha_alpha_indices = [(p, p + 1) for p in range(num_orb - 1)]
+        alpha_beta_indices  = [(p, p) for p in range(0, num_orb)]
+    else:
+        alpha_alpha_indices = None
+        alpha_beta_indices  = None
 
     ucj_op_2layer = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
         t2=ccsd.t2, t1=ccsd.t1, n_reps=2,
@@ -123,47 +127,14 @@ def sim_is(connectivity, cutoff):
     circuit.append(ffsim.qiskit.PrepareHartreeFockJW(num_orb, nelec), qubits)
     circuit.append(ffsim.qiskit.UCJOpSpinBalancedJW(ucj_op), qubits)
 
-    # CUSTOM CONNECTIVITY LOGIC
-
-    nq = 2*num_orb
-    start = int(np.sqrt(nq))
-    rows, cols = 0,0
-
-    for i in range(start, 0, -1):
-        if nq % i == 0:
-            rows, cols = i, nq // i
-            break
-        
-    print(f"Rows: {rows}, Cols: {cols}")
-
-    coupling_map = None
-    if connectivity == "square":
-        coupling_map = CouplingMap.from_grid(num_rows=rows,num_columns=cols)
-    if connectivity == "all":
-        coupling_map = CouplingMap.from_full(rows * cols)
-    if connectivity == "heavy-hex":
-        coupling_map = CouplingMap.from_heavy_hex(distance=7)
-
+    coupling_map = CouplingMap.from_full(num_qubits=circuit.num_qubits)
     backend = GenericBackendV2(
         coupling_map.size(),
         coupling_map=coupling_map,
         basis_gates=["cp", "xx_plus_yy", "p", "x", "swap"],
     )
 
-    pass_manager = None
-    if connectivity != "all":
-        pass_manager, _ = ffsim.qiskit.generate_lucj_pass_manager(
-            backend=backend,
-            norb=num_orb,
-            connectivity=connectivity,
-            interaction_pairs=(alpha_alpha_indices, alpha_beta_indices),
-            optimization_level=3,
-        )
-    
-    if pass_manager is not None:
-        compiled = pass_manager.run(circuit)
-    else:
-        compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
+    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=0)
 
     print(f"Number of qubits: {compiled.num_qubits}")
     print(f"Gate counts: {compiled.count_ops()}")
@@ -179,7 +150,7 @@ def sim_is(connectivity, cutoff):
     if (cutoff != 0):
         mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, max_bond=cutoff, backend=backend_hw)
     else:
-        mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+        mps, is_bond_data, latencies = simulate(compiled_cirq[0:39], verbose=True, backend=backend_hw)
 
     return mps, is_bond_data, compiled.num_qubits, latencies
 
@@ -197,21 +168,28 @@ if __name__ == "__main__":
     mps = None
 
     if test_num == 1:
-        mps, output_data, nqubits, latencies = sim_is("square", cutoff)
-    elif test_num == 2:
-        mps, output_data, nqubits, latencies = sim_is("heavy-hex", cutoff)
-    elif test_num == 3:
-        mps, output_data, nqubits, latencies = sim_is("all", cutoff)
+        mps, output_data, nqubits, latencies = sim_is(True, cutoff)
+    if test_num == 2:
+        mps, output_data, nqubits, latencies = sim_is(False, cutoff)
     
+    nlayers = 0.5 if cutoff == 0 else 1
+
     output = {
         "n_qubits": nqubits,
-        "n_layers": 1,
+        "n_layers": nlayers,
         "cutoff": cutoff,
         "data": output_data,
         "latencies": latencies
     }
 
-    with open(f"Fe4S4_data/{datasets[test_num-1]}_{cutoff}.json", "w") as f:
-        json.dump(output, f, indent=4)
+    if cutoff != 0:
+        with open(f"{datasets[test_num-1]}_{cutoff}.json", "w") as f:
+            json.dump(output, f, indent=4)
 
+    else:
+        with open(f"forward_prop.json", "w") as f:
+            json.dump(output, f, indent=4)
+
+    qu.utils.save_to_disk(mps, "product_states/forward_mps")
     qu.utils.save_to_disk(mps, f"product_states/{datasets[test_num-1]}_{cutoff}.qu")
+    
