@@ -16,9 +16,12 @@ import cirq
 
 
 ALL_CONNECTIVITIES = ["square", "heavy-hex", "all"]
+ALL_LOCALITIES = [True, False]
 fcidump_filename = "fcidump_Fe4S4_MO.txt"
 
-def make_compiled_ham(connectivity):
+def make_compiled_ham(local):
+    locality = "LUCJ" if local else "UCJ"
+    
     mf_as = tools.fcidump.to_scf(fcidump_filename)
     mf_as.kernel()
     h1e = mf_as.get_hcore()
@@ -34,8 +37,12 @@ def make_compiled_ham(connectivity):
     ccsd_energy = ccsd.e_tot
     print(f"CCSD energy: {ccsd_energy:.10e}")
 
-    alpha_alpha_indices = [(p, p + 1) for p in range(num_orb - 1)]
-    alpha_beta_indices  = [(p, p) for p in range(0, num_orb, 4) if p <= 16]
+    if local:
+        alpha_alpha_indices = [(p, p + 1) for p in range(num_orb - 1)]
+        alpha_beta_indices  = [(p, p) for p in range(0, num_orb)]
+    else:
+        alpha_alpha_indices = None
+        alpha_beta_indices  = None
 
     ucj_op_2layer = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
         t2=ccsd.t2, t1=ccsd.t1, n_reps=2,
@@ -66,7 +73,7 @@ def make_compiled_ham(connectivity):
     print(f"Number of qubits: {compiled.num_qubits}")
     print(f"Gate counts: {compiled.count_ops()}")
 
-    circuit_path = f"hamiltonians/{connectivity}_circuit.qpy"
+    circuit_path = f"hamiltonians/{locality}_circuit.qpy"
     with open(circuit_path, "wb") as f:
         qpy.dump(compiled, f)
     print(f"Saved circuit: {circuit_path}")
@@ -79,13 +86,13 @@ def make_compiled_ham(connectivity):
     hamiltonian_physical = hamiltonian.apply_layout(compiled.layout)
 
     np.savez(
-        f"hamiltonians/{connectivity}_hamiltonian.npz",
+        f"hamiltonians/{locality}_hamiltonian.npz",
         paulis=np.array(hamiltonian_physical.paulis.to_labels()),
         coeffs=np.array(hamiltonian_physical.coeffs),
         ccsd_energy=np.float64(ccsd_energy),
         n_qubits=np.int64(compiled.num_qubits),
     )
-    print(f"{connectivity}_compiled_hamiltonian.npz")
+    print(f"{locality}_compiled_hamiltonian.npz")
 
 
 remake_cache = False
@@ -122,5 +129,5 @@ if remake_cache:
     print("Number of terms after cutoff:", len(hamiltonian.coeffs))
     print(f"Hamiltonian cached to {hamiltonian_cache}")
 
-for connectivity in ALL_CONNECTIVITIES:
-    make_compiled_ham(connectivity)
+for locality in ALL_LOCALITIES:
+    make_compiled_ham(locality)

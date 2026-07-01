@@ -7,15 +7,11 @@ filenames = [
     "forward_prop_UCJ"
 ]
 
-cutoff = 0
-if len(sys.argv) == 2:
-    cutoff = int(sys.argv[1])
-
 datasets = {}
 latency_sets = {}
 
 for filename in filenames:
-    with open(f"forward_prop/{filename}_{cutoff}.json", "r") as f:
+    with open(f"forward_prop/{filename}.json", "r") as f:
         contents = json.load(f)
 
     datasets[filename] = contents["data"]
@@ -32,25 +28,21 @@ nqubits = 72
 
 plt.figure(figsize=(9,5))
 
-if cutoff != 0:
-    plt.title(f"Fe4S4 Forward Propagation Max Bond Dimension (Cutoff: {cutoff})")
-else:
-    plt.title(f"Fe4S4 Forward Propagation Max Bond Dimension")
+plt.title(f"Fe4S4 Forward Propagation Max Bond Dimension")
 
 plt.semilogy(fl, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Local")
 plt.semilogy(fu, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Non-Local")
 plt.axhline(2 ** (nqubits / 2), ls="--", color="black")
 
-if cutoff == 0:
-    plt.axvline(4156, ls="--", color="C0", alpha=0.7)
-    plt.axvline(6678, ls="--", color="C1", alpha=0.7)
+plt.axvline(4156, ls="--", color="C0", alpha=0.7)
+plt.axvline(6678, ls="--", color="C1", alpha=0.7)
 
 plt.legend()
 
 plt.xlabel("Gate index")
 plt.ylabel(r"$\chi_\text{max}$");
 
-plt.savefig(f"forward_prop/forward_prop_{cutoff}.png")
+plt.savefig(f"forward_prop/forward_prop.png")
     
 plt.clf()
 
@@ -63,10 +55,7 @@ def format_time(seconds):
     hours, minutes = divmod(mins, 60)
     return f"{int(hours)}:{minutes:02.0f}"
 
-if cutoff != 0:
-    plt.title(f"Fe4S4 Forward Propagation Gate Application Time (Cutoff: {cutoff})")
-else:
-    plt.title(f"Fe4S4 Forward Propagation Gate Application Time")
+plt.title(f"Fe4S4 Forward Propagation Gate Application Time")
 
 plt.plot(fl_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Local ({format_time(fl_time)})")
 plt.plot(fu_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Non-Local ({format_time(fu_time)})")
@@ -76,6 +65,6 @@ plt.legend(title="Runtime (hr:min)")
 plt.xlabel("Gate index")
 plt.ylabel("Application Time (seconds)")
 
-plt.savefig(f"forward_prop/forward_prop_latencies_{cutoff}.png")
+plt.savefig(f"forward_prop/forward_prop_latencies.png")
     
 plt.clf()

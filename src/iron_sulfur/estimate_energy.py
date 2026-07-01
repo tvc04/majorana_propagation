@@ -24,7 +24,8 @@ from quimb.tensor.tensor_1d import MatrixProductOperator, MatrixProductState
 from quimb.tensor.tensor_1d_compress import tensor_network_1d_compress_direct
 
 ALL_CONNECTIVITIES = ["square", "heavy-hex", "all"]
-ALL_MAX_BONDS = [32, 64, 128, 256]
+ALL_LOCALITIES = ["LUCJ", "UCJ"]
+ALL_MAX_BONDS = [32, 64, 128]
 fcidump_filename = "fcidump_Fe4S4_MO.txt"
 chop_threshold = 1e-10
 
@@ -170,31 +171,74 @@ def get_cirq_qubits_from_qpy(connectivity):
 
 
 def load_mps(connectivity, cutoff):
-    prefix = "sq"
+    prefix = connectivity
+    prop = True
+    if connectivity == "square":
+        prefix = "sq"
+        prop = False
     if connectivity == "heavy-hex":
         prefix = "hh"
+        prop = False
     if connectivity == "all":
         prefix = "aa"
+        prop = False
+
+    name = "forward_prop" if prop else "Fe4S4"
     
-    filename = f"product_states/Fe4S4_{prefix}_{cutoff}.pkl"
-    with open(filename, "rb") as f:
-        mps = pickle.load(f)
+    filename = f"product_states/{name}_{prefix}_{cutoff}.qu"
+    
+    mps = quimb.load_from_disk(filename)
 
     return mps
 
 
-test_num = int(sys.argv[1]) # 1 = square, 2 = heavy hex, 3 = all to all
-connectivity = ALL_CONNECTIVITIES[test_num-1]
+test_num = int(sys.argv[1])
+connectivity = ALL_LOCALITIES[test_num-1]
 
 print(f"\nStarting {connectivity} estimations")
 print("\nCreating qubit operator...")
 qo = get_qubit_operator(connectivity)
 print("\nCreating pauli sum...")
 ps = of.transforms.qubit_operator_to_pauli_sum(qo) # also pass in qs?
-#print("\nLoading cirq file...")
-#qc, qs = get_cirq_qubits_from_qpy(connectivity)
 print("\nGetting qubits...")
-qs = list(sorted(set(ps.qubits), key=lambda q: str(q)))
+#qs = list(sorted(set(ps.qubits), key=lambda q: str(q)))
+
+cirq_circuit, circuit_qs = get_cirq_qubits_from_qpy(connectivity)
+
+circuit_qs = sorted(
+    circuit_qs,
+    key=lambda q: int(q.name.split("_")[1])
+)
+
+# Get Hamiltonian qubits in numerical order
+ham_qs = sorted(
+    set(q for term in ps for q in term.qubits),
+    key=lambda q: q.x,  # LineQubit index
+)
+
+# Map Hamiltonian qubits onto the circuit qubits
+qubit_map = dict(zip(ham_qs, circuit_qs))
+
+# Remap all PauliStrings
+new_terms = []
+
+for term in ps:
+    mapped_ops = {
+        qubit_map[q]: p
+        for q, p in term.items()
+    }
+
+    new_terms.append(
+        cirq.PauliString(
+            mapped_ops,
+            coefficient=term.coefficient,
+        )
+    )
+
+ps = cirq.PauliSum.from_pauli_strings(new_terms)
+
+# Canonical qubit ordering for dense() and MPO construction
+qs = circuit_qs
 
 for cutoff in ALL_MAX_BONDS:
     print(f"\nCreating {connectivity} {cutoff} cutoff mpo...")
@@ -205,14 +249,7 @@ for cutoff in ALL_MAX_BONDS:
     expectation = mpo_mps_exepctation(mpo, mps)
 
     print(f"\nFe4S4 EXPECTATION ({connectivity}, cutoff {cutoff}):")
-    print(expectation)
+    print(expectation.real)
     print()
 
-fcidump_filename = "fcidump_Fe4S4_MO.txt"
-
-mf_as = tools.fcidump.to_scf(fcidump_filename)
-mf_as.kernel()
-
-ccsd = cc.CCSD(mf_as).run()
-ccsd_energy = ccsd.e_tot
-print(f"ACTUAL CCSD energy: {ccsd_energy:.10e}")
+print("\nACTUAL E(CCSD) = -326.8682032082641\n")
