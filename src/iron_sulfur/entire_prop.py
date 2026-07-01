@@ -85,7 +85,7 @@ def simulate(
     return mps
 
 
-def sim_is(local, cutoff):
+def sim_is(local):
     fcidump_filename = "fcidump_Fe4S4_MO.txt"
 
     mf_as = tools.fcidump.to_scf(fcidump_filename)
@@ -150,10 +150,7 @@ def sim_is(local, cutoff):
 
     print(f"SIMULATING Fe4S4 using {backend_hw}")
 
-    if (cutoff != 0):
-        mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, max_bond=cutoff, backend=backend_hw)
-    else:
-        mps, is_bond_data, latencies = simulate(compiled_cirq[0:39], verbose=True, backend=backend_hw)
+    mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, backend=backend_hw)
 
     return mps, is_bond_data, compiled.num_qubits, latencies
 
@@ -161,31 +158,26 @@ def sim_is(local, cutoff):
 if __name__ == "__main__":
 
     test_num = int(sys.argv[1])
-    cutoff = 0
-    if len(sys.argv) == 3:
-        cutoff = int(sys.argv[2])
 
-    datasets = ["forward_prop_LUCJ","forward_prop_UCJ"]
+    datasets = ["entire_prop_LUCJ","entire_prop_UCJ"]
 
     output_data = None
     mps = None
 
     if test_num == 1:
-        mps, output_data, nqubits, latencies = sim_is(True, cutoff)
+        mps, output_data, nqubits, latencies = sim_is(True)
     if test_num == 2:
-        mps, output_data, nqubits, latencies = sim_is(False, cutoff)
-    
-    nlayers = 0.5 if cutoff == 0 else 1
+        mps, output_data, nqubits, latencies = sim_is(False)
 
     output = {
         "n_qubits": nqubits,
-        "n_layers": nlayers,
-        "cutoff": cutoff,
+        "n_layers": 1,
+        "cutoff": 0,
         "data": output_data,
         "latencies": latencies
     }
 
-    with open(f"forward_prop/{datasets[test_num-1]}_{cutoff}.json", "w") as f:
+    with open(f"forward_prop/{datasets[test_num-1]}.json", "w") as f:
         json.dump(output, f, indent=4)
 
-    qu.utils.save_to_disk(mps, f"product_states/{datasets[test_num-1]}_{cutoff}.qu")
+    qu.utils.save_to_disk(mps, f"product_states/{datasets[test_num-1]}.qu")
