@@ -12,6 +12,7 @@ import qiskit
 from qiskit import qasm2
 from qiskit.providers.fake_provider import GenericBackendV2
 from qiskit.transpiler import CouplingMap
+from qiskit.quantum_info import SparsePauliOp, Operator, Statevector
 
 import cirq
 from cirq.contrib import qasm_import
@@ -23,18 +24,20 @@ from pyscf import ao2mo, tools, cc
 
 
 def simulate(
-    circuit: cirq.Circuit,
+    circuit: qiskit.QuantumCircuit,
     verbose: bool = False,
-    seed: Optional[int] = None,
     backend: str = "cpu",
     max_bond: Optional[int] = None,
     cutoff: float = 0.0,
+    save_every: Optional[int] = None,
 ) -> qtn.MatrixProductState:
-    max_bonds = []
-    latencies = []
-    rng = np.random.RandomState(seed)
+    save = isinstance(save_every, int)
 
-    qubits_to_indices = {q: i for i, q in enumerate(sorted(circuit.all_qubits()))}
+    max_bonds = []
+    bond_sizes = []
+    latencies = []
+
+    qubits_to_indices = {q: i for i, q in enumerate(circuit.qubits)}
     nqubits = len(qubits_to_indices)
 
     mps = qtn.MPS_computational_state("0" * nqubits, dtype="float64", cyclic=False)
@@ -45,22 +48,19 @@ def simulate(
                 apply=lambda x: torch.tensor(x, dtype=torch.complex64, device="cuda")
             )
 
-    num_ops = len(list(circuit.all_operations()))
-    for i, op in enumerate(circuit.all_operations()):
+    num_ops = len(circuit.data)
+    for i, instruction in enumerate(circuit.data):
         start = time.perf_counter()
-        qubit_indices = [qubits_to_indices[q] for q in op.qubits]
-        if cirq.has_unitary(op):
-            to_apply = qu.qarray(cirq.unitary(op))
-        elif cirq.has_mixture(op):
-            ps = []
-            ops = []
-            for (p, o) in cirq.mixture(op):
-                ps.append(p)
-                ops.append(o)
-            op = ops[rng.choice(range(len(ops)), p=ps)]
-            to_apply = qu.qarray(op)
-        else:
-            raise ValueError(f"Cannot apply operation {op}")
+
+        op = instruction.operation
+        qubits = instruction.qubits
+
+        if op.name == "barrier":
+            continue
+
+        qubit_indices = [qubits_to_indices[q] for q in reversed(qubits)]
+
+        to_apply = qu.qarray(Operator(op).data)
 
         if backend == "gpu":
             to_apply = torch.tensor(to_apply, dtype=torch.complex64, device="cuda")
@@ -72,16 +72,20 @@ def simulate(
             max_bond=max_bond,
             cutoff=cutoff,
         )
-        mps.compress()
+        mps.compress(max_bond=max_bond, cutoff=cutoff)
         end = time.perf_counter()
+        if save and i % save_every == 0:
+            qu.save_to_disk(mps, f"mps_final_op_index_{i}")
+
         if verbose:
             max_bonds.append(mps.max_bond())
-            print(f"Op {i + 1} / {num_ops}, max bond = {mps.max_bond()}, latency = {end-start}")
-        
+            bond_sizes.append(mps.bond_sizes())
+            print(f"Op {i + 1} / {num_ops}, max bond = {mps.max_bond()}, latency = {end-start:10.5f}")
+
         latencies.append(end-start)
 
     if verbose:
-        return mps, max_bonds, latencies
+        return mps, max_bonds, latencies, bond_sizes
     return mps
 
 
@@ -141,8 +145,6 @@ def sim_is(local):
 
     print(f"Number of qubits: {compiled.num_qubits}")
     print(f"Gate counts: {compiled.count_ops()}")
-
-    compiled_cirq = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(compiled))
     
     backend_hw = "cpu"
     if torch.cuda.is_available() == True:
@@ -150,7 +152,7 @@ def sim_is(local):
 
     print(f"SIMULATING Fe4S4 using {backend_hw}")
 
-    mps, is_bond_data, latencies = simulate(compiled_cirq, verbose=True, backend=backend_hw)
+    mps, is_bond_data, latencies = simulate(compiled, verbose=True, backend=backend_hw)
 
     return mps, is_bond_data, compiled.num_qubits, latencies
 

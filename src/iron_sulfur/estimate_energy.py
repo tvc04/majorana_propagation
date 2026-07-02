@@ -19,7 +19,8 @@ from openfermion import QubitOperator
 
 from pyscf import ao2mo, tools, cc
 
-import quimb
+import quimb as qu
+import quimb.tensor as qtn
 from quimb.tensor.tensor_1d import MatrixProductOperator, MatrixProductState
 from quimb.tensor.tensor_1d_compress import tensor_network_1d_compress_direct
 
@@ -30,59 +31,33 @@ fcidump_filename = "fcidump_Fe4S4_MO.txt"
 chop_threshold = 1e-10
 
 
+def expectation_value(mps: qtn.MatrixProductState, pauli_op: SparsePauliOp | str) -> complex:
+    nqubits = len(mps.tensors)
+    total = 0.0 + 0.0j
 
-def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> MatrixProductOperator:
-    """Convert a Pauli string to a matrix product operator."""
+    if isinstance(pauli_op, str):
+        pauli_op = SparsePauliOp.from_list([(pauli_op, 1.0)])
 
-    # Make a list of matrices for each operator in the string.
-    ps_dense = pstring.dense(qs)
-    matrices: List[np.ndarray] = []
-    for pauli_int in ps_dense.pauli_mask:
-        if pauli_int == 0:
-            matrices.append(np.eye(2))
-        elif pauli_int == 1:
-            matrices.append(cirq.unitary(cirq.X))
-        elif pauli_int == 2:
-            matrices.append(cirq.unitary(cirq.Y))
-        else: # pauli_int == 3
-            matrices.append(cirq.unitary(cirq.Z))
-    # Convert the matrices into tensors. We have a bond dim chi=1 for a Pauli string MPO.
-    tensors: List[np.ndarray] = []
-    for i, m in enumerate(matrices):
-        if i == 0:
-            tensors.append(m.reshape((2, 2, 1)))
-        elif i == len(matrices) - 1:
-            tensors.append(m.reshape((1, 2, 2)))
-        else:
-            tensors.append(m.reshape((1, 2, 2, 1)))
-    return pstring.coefficient * MatrixProductOperator(tensors, shape="ludr")
+    for label, coeff in zip(pauli_op.paulis.to_labels(), pauli_op.coeffs):
+        this_mps = mps.copy()
+        this_bra = this_mps.H.copy()
 
+        for pos, char in enumerate(label):
+            if char == "I":
+                continue
+            qubit_index = nqubits - 1 - pos  # Reversed order in Qiskit.
+            this_mps.gate_(
+                qu.pauli(char),
+                where=qubit_index,
+                contract="swap+split",
+            )
+        total += coeff * qtn.expec_TN_1D(this_bra, this_mps)
 
-
-def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int, verbose: bool = False) -> MatrixProductOperator:
-    """Convert a Pauli sum to an MPO."""
-    nterms = len(psum)
-    for i, p in enumerate(psum):
-        if verbose:
-            print(f"Status: On term {i + 1} / {nterms}", end="\r")
-        if i == 0:
-            mpo = pauli_string_to_mpo(p, qs)
-        else:
-            mpo += pauli_string_to_mpo(p, qs)
-            tensor_network_1d_compress_direct(mpo, max_bond=max_bond, inplace=True)
-    return mpo
-
-
-
-def mpo_mps_exepctation(mpo: MatrixProductOperator, mps: MatrixProductState) -> complex:
-    """Get the expectation of an operator given the state."""
-
-    mpo_times_mps = mpo.apply(mps)
-    return mps.H @ mpo_times_mps
-
+    return total
 
 
 def compress_ham(hamiltonian):
+    print(f"Original Hamiltonian: {len(hamiltonian)} terms")
     labels = hamiltonian.paulis.to_labels()
 
     if chop_threshold != None:
@@ -113,8 +88,7 @@ def compress_ham(hamiltonian):
     return ham_weight12
 
 
-
-def get_qubit_operator(connectivity):
+def get_pauli_op(connectivity):
     cache = np.load(f"hamiltonians/{connectivity}_hamiltonian.npz")
 
     paulis = cache["paulis"].astype(str)
@@ -125,49 +99,9 @@ def get_qubit_operator(connectivity):
         list(zip(paulis, coeffs))
     )
 
-    print(f"Original Hamiltonian: {len(hamiltonian)} terms")
-
     hamiltonian = compress_ham(hamiltonian)
 
-    qubit_operator = QubitOperator()
-
-    for label, coeff in zip(hamiltonian.paulis.to_labels(), hamiltonian.coeffs):
-
-        term = []
-
-        for i, p in enumerate(label[::-1]):
-
-            if p != "I":
-                term.append(f"{p}{i}")
-
-        if len(term) == 0:
-            qubit_operator += QubitOperator("", coeff)
-        else:
-            qubit_operator += QubitOperator(
-                " ".join(term),
-                coeff
-            )
-
-    print()
-    return qubit_operator
-
-
-
-def get_cirq_qubits_from_qpy(connectivity):
-    # Load Qiskit circuit
-    with open(f"hamiltonians/{connectivity}_circuit.qpy", "rb") as f:
-        circuits = qpy.load(f)
-
-    qiskit_circuit = circuits[0]
-
-    # Convert to Cirq
-    cirq_circuit = cirq.contrib.qasm_import.circuit_from_qasm(qasm2.dumps(qiskit_circuit))
-
-    # Get qubit list
-    qs = cirq_circuit.all_qubits()
-
-    return cirq_circuit, qs
-
+    return hamiltonian
 
 
 def load_mps(connectivity, cutoff):
@@ -187,7 +121,7 @@ def load_mps(connectivity, cutoff):
     
     filename = f"product_states/{name}_{prefix}_{cutoff}.qu"
     
-    mps = quimb.load_from_disk(filename)
+    mps = qu.load_from_disk(filename)
 
     return mps
 
@@ -196,57 +130,14 @@ test_num = int(sys.argv[1])
 connectivity = ALL_LOCALITIES[test_num-1]
 
 print(f"\nStarting {connectivity} estimations")
-print("\nCreating qubit operator...")
-qo = get_qubit_operator(connectivity)
-print("\nCreating pauli sum...")
-ps = of.transforms.qubit_operator_to_pauli_sum(qo) # also pass in qs?
-print("\nGetting qubits...")
-#qs = list(sorted(set(ps.qubits), key=lambda q: str(q)))
-
-cirq_circuit, circuit_qs = get_cirq_qubits_from_qpy(connectivity)
-
-circuit_qs = sorted(
-    circuit_qs,
-    key=lambda q: int(q.name.split("_")[1])
-)
-
-# Get Hamiltonian qubits in numerical order
-ham_qs = sorted(
-    set(q for term in ps for q in term.qubits),
-    key=lambda q: q.x,  # LineQubit index
-)
-
-# Map Hamiltonian qubits onto the circuit qubits
-qubit_map = dict(zip(ham_qs, circuit_qs))
-
-# Remap all PauliStrings
-new_terms = []
-
-for term in ps:
-    mapped_ops = {
-        qubit_map[q]: p
-        for q, p in term.items()
-    }
-
-    new_terms.append(
-        cirq.PauliString(
-            mapped_ops,
-            coefficient=term.coefficient,
-        )
-    )
-
-ps = cirq.PauliSum.from_pauli_strings(new_terms)
-
-# Canonical qubit ordering for dense() and MPO construction
-qs = circuit_qs
+print("\nLoading Pauli Operator...")
+po = get_pauli_op(connectivity)
 
 for cutoff in ALL_MAX_BONDS:
-    print(f"\nCreating {connectivity} {cutoff} cutoff mpo...")
-    mpo = pauli_sum_to_mpo(ps, qs, cutoff)
     print(f"\nLoading {connectivity} {cutoff} cutoff mps...")
     mps = load_mps(connectivity, cutoff)
     print(f"\nCalculating expectation...")
-    expectation = mpo_mps_exepctation(mpo, mps)
+    expectation = expectation_value(mps, po)
 
     print(f"\nFe4S4 EXPECTATION ({connectivity}, cutoff {cutoff}):")
     print(expectation.real)
