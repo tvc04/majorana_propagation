@@ -121,7 +121,7 @@ if remake_cache:
     print(f"Hamiltonian has {len(hamiltonian)} Pauli terms before cutoff.")
 
     hamiltonian = hamiltonian.simplify()
-    hamiltonian = hamiltonian.chop(1e-10)
+    #hamiltonian = hamiltonian.chop(1e-10)
     sorted_indices = np.argsort(-np.abs(hamiltonian.coeffs))
     hamiltonian = hamiltonian[sorted_indices]
 

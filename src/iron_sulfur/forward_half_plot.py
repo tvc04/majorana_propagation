@@ -57,8 +57,8 @@ def format_time(seconds):
 
 plt.title(f"Fe4S4 Forward Propagation Gate Application Time")
 
-plt.plot(fl_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Local ({format_time(fl_time)})")
-plt.plot(fu_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Non-Local ({format_time(fu_time)})")
+plt.semilogy(fl_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Local ({format_time(fl_time)})")
+plt.semilogy(fu_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Non-Local ({format_time(fu_time)})")
 
 plt.legend(title="Runtime (hr:min)")
 

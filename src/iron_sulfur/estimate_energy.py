@@ -38,7 +38,13 @@ def expectation_value(mps: qtn.MatrixProductState, pauli_op: SparsePauliOp | str
     if isinstance(pauli_op, str):
         pauli_op = SparsePauliOp.from_list([(pauli_op, 1.0)])
 
+    num = len(pauli_op.coeffs)
+    i = 1
+
     for label, coeff in zip(pauli_op.paulis.to_labels(), pauli_op.coeffs):
+        print(f"\rTerm {i}/{num}", end="")
+        i += 1
+
         this_mps = mps.copy()
         this_bra = this_mps.H.copy()
 
@@ -72,6 +78,9 @@ def compress_ham(hamiltonian):
     print("Max Pauli weight:", max(weights))
     print("Weight 1 terms:", weights.count(1))
     print("Weight 2 terms:", weights.count(2))
+    print("Weight 3 terms:", weights.count(3))
+    print("Weight 4 terms:", weights.count(4))
+    print("Weight 5 terms:", weights.count(5))
     print("Weight >5 terms:", sum(w > 5 for w in weights))
 
     keep = [
