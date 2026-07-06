@@ -55,7 +55,7 @@ def simulate(
         if op.name == "barrier":
             continue
 
-        qubit_indices = [qubits_to_indices[q] for q in reversed(qubits)]
+        qubit_indices = [qubits_to_indices[q] for q in qubits]
 
         to_apply = qu.qarray(Operator(op).data)
 
@@ -69,7 +69,7 @@ def simulate(
             max_bond=max_bond,
             cutoff=cutoff,
         )
-        mps.compress(max_bond=max_bond, cutoff=cutoff)
+        mps.compress()
         end = time.perf_counter()
         if save and i % save_every == 0:
             qu.save_to_disk(mps, f"mps_final_op_index_{i}")

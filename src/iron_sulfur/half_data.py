@@ -17,7 +17,7 @@ with open(input_file, "r") as f:
     for line in f:
         match = re.search(r"Op\s+(\d+)\s*/\s*(\d+),\s*max bond\s*=\s*(\d+),\s*latency\s*=\s*([\d.]+)", line)
         if match:
-            data.append(int(match.group(1)))
+            data.append(int(match.group(3)))
             latencies.append(float(match.group(4)))
 
 # Create JSON structure
