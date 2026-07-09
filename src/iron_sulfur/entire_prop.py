@@ -29,9 +29,7 @@ def simulate(
     backend: str = "cpu",
     max_bond: Optional[int] = None,
     cutoff: float = 0.0,
-    save_every: Optional[int] = None,
 ) -> qtn.MatrixProductState:
-    save = isinstance(save_every, int)
 
     max_bonds = []
     bond_sizes = []
@@ -58,7 +56,7 @@ def simulate(
         if op.name == "barrier":
             continue
 
-        qubit_indices = [qubits_to_indices[q] for q in qubits]
+        qubit_indices = [qubits_to_indices[q] for q in reversed(qubits)]
 
         to_apply = qu.qarray(Operator(op).data)
 
@@ -72,10 +70,9 @@ def simulate(
             max_bond=max_bond,
             cutoff=cutoff,
         )
+        #mps.compress(max_bond=max_bond, cutoff=cutoff)
         mps.compress()
         end = time.perf_counter()
-        if save and i % save_every == 0:
-            qu.save_to_disk(mps, f"mps_final_op_index_{i}")
 
         if verbose:
             max_bonds.append(mps.max_bond())
@@ -109,7 +106,7 @@ def sim_is(local):
     
     if local:
         alpha_alpha_indices = [(p, p + 1) for p in range(num_orb - 1)]
-        alpha_beta_indices  = [(p, p) for p in range(0, num_orb)]
+        alpha_beta_indices  = [(p, p) for p in range(0, num_orb, 4) if p <= 16]
     else:
         alpha_alpha_indices = None
         alpha_beta_indices  = None

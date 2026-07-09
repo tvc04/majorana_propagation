@@ -59,11 +59,6 @@ def create_circuit(natoms):
     cas = pyscf.mcscf.CASCI(scf, norb, nelec)
     mo = cas.sort_mo(active_space, base=0)
 
-    # Perturb t1/t2 to emulate unconverged CCSD.
-    lambda_value = 0.01
-    #t1 += np.random.randn(*t1.shape) * np.abs(t1) * lambda_value
-    #t2 += np.random.randn(*t2.shape) * np.abs(t2) * lambda_value
-
     hcore, nuclear_repulsion_energy = cas.get_h1cas(mo)
     eri = pyscf.ao2mo.restore(1, cas.get_h2cas(mo), norb)
 
@@ -212,7 +207,7 @@ def simulate_energy(circuit, hamiltonian, max_bond, verbose=True):
 
 
 atom_nums = [8, 16, 24, 32]
-chi_values = [16, 24, 32, 64, 128, 200, 256]
+chi_values = [16, 24, 32, 64, 128, 200, 256, 512]
 
 for num in atom_nums:
     print(f"\n\n------ Starting {num} atom benchmarking ------\n\n")
@@ -248,6 +243,8 @@ for num in atom_nums:
     plt.ylim(scf_val - 0.200, scf_val + 0.500)
     plt.legend()
 
+    plt.title(f"{num} Atom Energy Convergence")
+
     plt.savefig(f"plots/{num}_atom_benchmarking.png")
     plt.clf()
 
@@ -259,6 +256,8 @@ for num in atom_nums:
     plt.xlabel("Bond dimension (max bond dim = 256)")
     plt.ylabel("Energy (Ha)")
     plt.legend()
+    
+    plt.title(f"{num} Atom Energy Convergence")
     
     plt.savefig(f"plots/{num}_atom_convergence.png")
     plt.clf()
