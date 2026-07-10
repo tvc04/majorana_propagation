@@ -114,16 +114,16 @@ def sim_is(local):
     print(f"\naa pairs: {alpha_alpha_indices}")
     print(f"ab pairs: {alpha_beta_indices}\n")
 
-    ucj_op_2layer = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
-        t2=ccsd.t2, t1=ccsd.t1, n_reps=2,
+    ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+        t2=ccsd.t2, t1=ccsd.t1, n_reps=1,
         interaction_pairs=(alpha_alpha_indices, alpha_beta_indices),
     )
 
-    ucj_op = ffsim.UCJOpSpinBalanced(
-        diag_coulomb_mats=ucj_op_2layer.diag_coulomb_mats[:1],
-        orbital_rotations=ucj_op_2layer.orbital_rotations[:1],
-        final_orbital_rotation=ucj_op_2layer.orbital_rotations[1].T.conj(),
-    )
+    #ucj_op = ffsim.UCJOpSpinBalanced(
+    #    diag_coulomb_mats=ucj_op_2layer.diag_coulomb_mats[:1],
+    #    orbital_rotations=ucj_op_2layer.orbital_rotations[:1],
+    #    final_orbital_rotation=ucj_op_2layer.orbital_rotations[1].T.conj(),
+    #)
 
     nelec = (num_elec_a, num_elec_b)
     qubits = qiskit.QuantumRegister(2 * num_orb, name="q")
@@ -138,7 +138,7 @@ def sim_is(local):
         basis_gates=["cp", "xx_plus_yy", "p", "x", "swap"],
     )
 
-    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
+    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=0)
 
     print(f"Number of qubits: {compiled.num_qubits}")
     print(f"Gate counts: {compiled.count_ops()}")
