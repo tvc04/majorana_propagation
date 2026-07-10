@@ -138,7 +138,7 @@ def sim_is(local):
         basis_gates=["cp", "xx_plus_yy", "p", "x", "swap"],
     )
 
-    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=0)
+    compiled = qiskit.transpile(circuit, backend=backend, optimization_level=3)
 
     print(f"Number of qubits: {compiled.num_qubits}")
     print(f"Gate counts: {compiled.count_ops()}")

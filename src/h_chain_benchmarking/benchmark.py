@@ -1,5 +1,6 @@
 from typing import Optional
 
+import sys
 import torch
 import json
 import numpy as np
@@ -195,9 +196,14 @@ def simulate_energy(circuit, hamiltonian, max_bond, verbose=True):
     mps_base = mps.copy()
     nterms = len(coeffs_sorted)
     energies = [energy]
+    qnum = circuit.num_qubits
     for j, (coeff, pauli) in enumerate(zip(coeffs_sorted, paulis_sorted)):
-        energy += coeff * expectation_value(mps_base, pauli)
-        energies.append(energy)
+        
+        weight = sum(p != "I" for p in pauli)
+        if weight <= 2 or qnum <= 32:
+            energy += coeff * expectation_value(mps_base, pauli)
+            energies.append(energy)
+        
         if verbose or j % 100 == 0:
             print(f"\rIndex = {j + 1} / {nterms}, E = {energy.real:8f}", end="")
         if j == nterms-1:
@@ -206,10 +212,9 @@ def simulate_energy(circuit, hamiltonian, max_bond, verbose=True):
     return energies
 
 
-atom_nums = [8, 16, 24, 32]
-chi_values = [16, 24, 32, 64, 128, 200, 256, 512]
+chi_values = [16, 24, 32, 64, 128, 200, 256, 512, 768, 1024, 1536, 2048]
 
-for num in atom_nums:
+def run_benchmark(num):
     print(f"\n\n------ Starting {num} atom benchmarking ------\n\n")
     circuit, hamiltonian, scf, ccsd = create_circuit(num)
     scf_val = scf.scf()
@@ -261,3 +266,13 @@ for num in atom_nums:
     
     plt.savefig(f"plots/{num}_atom_convergence.png")
     plt.clf()
+
+
+atom_nums = [8, 16, 24, 32]
+
+if len(sys.argv) == 2:
+    num_atoms = int(sys.argv[1])
+    run_benchmark(num_atoms)
+else:
+    for num in atom_nums:
+        run_benchmark(num)
