@@ -34,8 +34,8 @@ plt.semilogy(fl, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=
 plt.semilogy(fu, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Non-Local")
 plt.axhline(2 ** (nqubits / 2), ls="--", color="black")
 
-plt.axvline(4156, ls="--", color="C0", alpha=0.7)
-plt.axvline(6678, ls="--", color="C1", alpha=0.7)
+plt.axvline(3787, ls="--", color="C0", alpha=0.7)
+plt.axvline(6340, ls="--", color="C1", alpha=0.7)
 
 plt.legend()
 
