@@ -70,8 +70,8 @@ def simulate(
             max_bond=max_bond,
             cutoff=cutoff,
         )
-        #mps.compress(max_bond=max_bond, cutoff=cutoff)
-        mps.compress()
+        mps.compress(max_bond=max_bond, cutoff=1e-9)
+        #mps.compress()
         end = time.perf_counter()
 
         if verbose:
@@ -90,7 +90,11 @@ def sim_is(local):
     fcidump_filename = "fcidump_Fe4S4_MO.txt"
 
     mf_as = tools.fcidump.to_scf(fcidump_filename)
+    mf_as.max_cycle = 100
+    mf_as.conv_tol = 1e-9
+    mf_as = mf_as.newton()
     mf_as.kernel()
+    assert mf_as.converged, "SCF did not converge"
     h1e = mf_as.get_hcore()
 
     num_orb = h1e.shape[0]
