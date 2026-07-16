@@ -212,7 +212,7 @@ def simulate_energy(circuit, hamiltonian, max_bond, verbose=True):
     return energies
 
 
-chi_values = [16, 24, 32, 64, 128, 200, 256, 512, 768, 1024, 1536, 2048]
+chi_values = [16, 24, 32, 64, 128, 200, 256]
 
 def run_benchmark(num):
     print(f"\n\n------ Starting {num} atom benchmarking ------\n\n")
@@ -258,7 +258,6 @@ def run_benchmark(num):
     plt.axhline(scf_val, ls="--", color="black", label="HF")
     plt.axhline(scf_val + ccsd.ccsd()[0], ls="--", color="green", label="CCSD")
 
-    plt.xlabel("Bond dimension (max bond dim = 256)")
     plt.ylabel("Energy (Ha)")
     plt.legend()
     
