@@ -21,6 +21,9 @@ for filename in filenames:
 fl = datasets["forward_prop_LUCJ"]
 fu = datasets["forward_prop_UCJ"]
 
+l_x = [i/2793 for i in range(len(fl))]
+u_x = [i/5346 for i in range(len(fu))]
+
 fl_lat = latency_sets["forward_prop_LUCJ"]
 fu_lat = latency_sets["forward_prop_UCJ"]
 
@@ -30,12 +33,12 @@ plt.figure(figsize=(9,5))
 
 plt.title(f"Fe4S4 Forward Propagation Max Bond Dimension")
 
-plt.semilogy(fl, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Local")
-plt.semilogy(fu, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Non-Local")
+plt.semilogy(l_x, fl, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label="Local")
+plt.semilogy(u_x, fu, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label="Non-Local")
 plt.axhline(2 ** (nqubits / 2), ls="--", color="black")
 
-plt.axvline(2793, ls="--", color="C0", alpha=0.7)
-plt.axvline(5346, ls="--", color="C1", alpha=0.7)
+#plt.axvline(2793, ls="--", color="C0", alpha=0.7)
+#plt.axvline(5346, ls="--", color="C1", alpha=0.7)
 
 plt.legend()
 
@@ -57,8 +60,8 @@ def format_time(seconds):
 
 plt.title(f"Fe4S4 Forward Propagation Gate Application Time")
 
-plt.plot(fl_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Local ({format_time(fl_time)})")
-plt.plot(fu_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Non-Local ({format_time(fu_time)})")
+plt.plot(l_x, fl_lat, "--o", markevery=10, color="C0", mec="black", alpha=0.5, label=f"Local ({format_time(fl_time)})")
+plt.plot(u_x, fu_lat, "--o", markevery=10, color="C1", mec="black", alpha=0.5, label=f"Non-Local ({format_time(fu_time)})")
 
 plt.legend(title="Runtime (hr:min)")
 
