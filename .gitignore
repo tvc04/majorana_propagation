@@ -30,3 +30,5 @@ JuliaLocalPreferences.toml
 src/.ipynb_checkpoints
 
 src/beyond_classical/__pycache__
+
+src/noisy_simulations/__pycache__
