@@ -46,7 +46,7 @@ plt.xlabel("Gate index")
 plt.ylabel(r"$\chi_\text{max}$");
 
 plt.savefig(f"plots/{prefix}_noisy.png")
-    
+
 plt.clf()
 
 def format_time(seconds):
@@ -61,7 +61,7 @@ else:
 
 for rate in noise_rates:
     total_time = sum(latency_sets[rate])
-    plt.plot(latency_sets[rate], "--o", markevery=10, mec="black", alpha=0.5, label=f"{rate} ({format_time(total_time)})")
+    plt.plot(latency_sets[rate], "--o", markevery=100, mec="black", alpha=0.5, label=f"{rate} ({format_time(total_time)})")
 
 plt.legend(title="Noise Rate & Runtime (min:sec)")
 
